@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Holy Grail War - Round Table 13</title>
+    <link rel="stylesheet" href="/src/style.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Lato:wght@400;700&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div id="app">
+      <!-- Game Over Overlay -->
+      <div id="game-over-overlay" class="overlay hidden">
+        <h1 id="winner-text">Winner: P1</h1>
+        <button id="restart-btn">Play Again</button>
+      </div>
+
+      <div class="game-layout">
+        <!-- Left: Side Panel -->
+        <aside class="side-panel">
+          <h2 class="game-title">Holy Grail War</h2>
+          <div class="turn-indicator">Turn <span id="turn-count">1</span>/5</div>
+          <div class="phase-indicator" id="phase-text">Selection</div>
+          <div class="log-container" id="log-container">
+            <!-- Logs go here -->
+          </div>
+        </aside>
+
+        <!-- Right: Board -->
+        <main class="board">
+
+          <!-- Opponent Area -->
+          <div class="player-area opponent">
+            <div class="player-info">
+              <span class="player-name">Enemy (CPU)</span>
+              <div class="grail-counter">🏆 <span id="p2-grails">2</span></div>
+            </div>
+            <div class="hand-container" id="p2-hand">
+              <!-- Back of cards -->
+            </div>
+          </div>
+
+          <!-- Battle Area -->
+          <div class="battle-area">
+            <div class="battle-slot" id="p2-slot">
+              <div class="card-placeholder">Enemy Slot</div>
+            </div>
+            <div class="versus">VS</div>
+            <div class="battle-slot" id="p1-slot">
+              <div class="card-placeholder">Your Slot</div>
+            </div>
+            <div id="battle-result-text" class="battle-result-text"></div>
+          </div>
+
+          <!-- Player Area -->
+          <div class="player-area player">
+            <div class="player-info">
+              <span class="player-name">Player 1</span>
+              <div class="grail-counter">🏆 <span id="p1-grails">2</span></div>
+            </div>
+            <div class="hand-container" id="p1-hand">
+              <!-- Playable cards -->
+            </div>
+          </div>
+
+        </main>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
