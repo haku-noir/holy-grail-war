@@ -1,6 +1,6 @@
 import type { Card, CardEffect, CardId } from './types';
 
-// Helper to get base card info
+// 基本カード情報を取得するヘルパー
 export const CARDS: Record<CardId, Card> = {
   1: { id: 1, name: 'モードレッド', basePower: 1, description: 'アーサー(13)に勝利する。勝利時、聖杯を2つ奪う。' },
   2: { id: 2, name: 'ベディヴィア', basePower: 2, description: '敗北時、次ターンの数値+10。' },
@@ -17,7 +17,7 @@ export const CARDS: Record<CardId, Card> = {
   13: { id: 13, name: 'アーサー', basePower: 13, description: '聖杯が相手より多い場合、勝利しても聖杯を得られない。' },
 };
 
-// Default effect implementation (Null Object pattern)
+// デフォルトのエフェクト実装 (Null Objectパターン)
 const defaultEffect: CardEffect = {
   getPower: (ctx) => CARDS[ctx.isP1 ? ctx.p1Card : ctx.p2Card].basePower,
   checkInstantWin: () => false,
@@ -130,7 +130,7 @@ export const CARD_EFFECTS: Record<CardId, CardEffect> = {
       if (result.winner === myId) {
         const isReversal = result.isLowerWinnings;
         // let gain = 1; 
-        // if (isReversal) gain = 1; // Steal 1 (Opponent -1, Me +1)
+        // if (isReversal) gain = 1; // 1奪取 (相手 -1, 自分 +1)
 
         // ケイ: 相手は聖杯を1つ場に捨てる (Opponent -1, Stock +1)
         // 下剋上(強奪)の場合: 自分+1, 相手-1 (基本) + 相手-1 (効果) = 自分+1, 相手-2, 場+1
@@ -227,7 +227,7 @@ export const CARD_EFFECTS: Record<CardId, CardEffect> = {
     onTurnEnd: (ctx, result) => {
       const myId = ctx.isP1 ? 'p1' : 'p2';
       if (result.winner === myId) {
-        // Win: Next turn -3
+        // 勝利: 次ターン -3
         ctx.gameState.players[myId].nextTurnBuff -= 3;
       }
     }
@@ -260,7 +260,7 @@ export const CARD_EFFECTS: Record<CardId, CardEffect> = {
       if (result.winner === myId) {
         // 勝利時、自分が聖杯リードしているなら聖杯を得ない
         if (ctx.gameState.players[myId].grails > ctx.gameState.players[oppId].grails) {
-           // Leading. Win gives 0.
+           // リード時、勝利しても0を得る。
            return { p1Change: 0, p2Change: 0, stockChange: 0 };
         }
       }

@@ -1,6 +1,6 @@
 import type { 
   GameState, PlayerId, CardId, 
-  BattleContext, BattleResult, CardEffect, RewardTransaction 
+  BattleContext, BattleResult, CardEffect, RewardTransaction, BattleEvent
 } from './types';
 import { CARDS, CARD_EFFECTS } from './cards';
 
@@ -34,14 +34,12 @@ export class GameEngine {
     this.gameState = this.createInitialState();
   }
 
-  private createInitialState(): GameState {
+  createInitialState(): GameState {
     const deck = shuffle([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] as CardId[]);
 
     // 5枚ずつ配布
     const p1Hand = deck.slice(0, 5);
     const p2Hand = deck.slice(5, 10);
-
-    // 残り3枚は未使用
 
     return {
       turn: 1,
@@ -64,13 +62,13 @@ export class GameEngine {
           nextTurnBuff: 0,
         }
       },
-      stockGrails: 100, // Conceptually infinite
-      logs: ['Game Start.'],
+      stockGrails: 100,
+      logs: [], // Deprecated? Used for text history storage if needed
       winner: null
     };
   }
 
-  // アクション: カードプレイ
+  // アクション: カードプレイ (Resolveは呼ばない)
   playCard(playerId: PlayerId, cardId: CardId): void {
     if (this.gameState.phase !== 'selection') return;
 
@@ -82,30 +80,33 @@ export class GameEngine {
 
     player.playedCard = cardId;
     player.hand = player.hand.filter(c => c !== cardId);
-
-    // 両者がカードを出したらターン解決へ
-    if (this.gameState.players.p1.playedCard && this.gameState.players.p2.playedCard) {
-      this.resolveTurn();
-    }
   }
 
-  private resolveTurn(): void {
+  // ターン解決: 明示的に呼び出す
+  resolveTurn(): { result: BattleResult, events: BattleEvent[] } {
     this.gameState.phase = 'resolution';
+    const events: BattleEvent[] = [];
+
+    // 両者がプレイしたか確認
+    if (!this.gameState.players.p1.playedCard || !this.gameState.players.p2.playedCard) {
+      throw new Error("Cannot resolve turn: both players must play a card.");
+    }
+
     const p1CardId = this.gameState.players.p1.playedCard!;
     const p2CardId = this.gameState.players.p2.playedCard!;
 
-    this.log(`ターン ${this.gameState.turn}: P1は ${CARDS[p1CardId].name}(${p1CardId}) をプレイ vs P2は ${CARDS[p2CardId].name}(${p2CardId}) をプレイ`);
+    events.push({ type: 'battle_start', payload: { turn: this.gameState.turn, p1Card: p1CardId, p2Card: p2CardId } });
 
     // 1. 効果の有効化判定 (トリスタン処理)
     let p1Effect = CARD_EFFECTS[p1CardId];
     let p2Effect = CARD_EFFECTS[p2CardId];
 
     if (p2CardId === 6) {
-      this.log('P2トリスタンの効果: P1の効果を無効化！');
+      events.push({ type: 'effect_activation', message: 'P2トリスタンの効果: P1の効果を無効化！', payload: { player: 'p2', card: 6, effect: 'negate' } });
       p1Effect = DEFAULT_EFFECT;
     }
     if (p1CardId === 6) {
-      this.log('P1トリスタンの効果: P2の効果を無効化！');
+      events.push({ type: 'effect_activation', message: 'P1トリスタンの効果: P2の効果を無効化！', payload: { player: 'p1', card: 6, effect: 'negate' } });
       p2Effect = DEFAULT_EFFECT;
     }
 
@@ -118,19 +119,16 @@ export class GameEngine {
     const ctxP2: BattleContext = { ...ctxP1, isP1: false };
 
     // 2. パワー計算
-    // 基本パワー取得
     let p1Power = p1Effect.getPower(ctxP1);
     let p2Power = p2Effect.getPower(ctxP2);
 
-    // バフ適用 (ベディヴィア/パーシヴァル)
+    // バフ適用
     p1Power += this.gameState.players.p1.nextTurnBuff;
     p2Power += this.gameState.players.p2.nextTurnBuff;
 
     // バフのリセット
     this.gameState.players.p1.nextTurnBuff = 0;
     this.gameState.players.p2.nextTurnBuff = 0;
-
-    this.log(`パワー: P1(${p1Power}) vs P2(${p2Power})`);
 
     // 3. 勝利判定
     let winner: PlayerId | 'draw' = 'draw';
@@ -141,17 +139,16 @@ export class GameEngine {
 
     if (p1Instant && !p2Instant) winner = 'p1';
     else if (!p1Instant && p2Instant) winner = 'p2';
-    else if (p1Instant && p2Instant) winner = 'draw'; // Mutual instant win? Draw.
+    else if (p1Instant && p2Instant) winner = 'draw';
     else {
       // 通常比較
-      // ルール変更チェック (ダゴネット)
       const p1Rule = p1Effect.getRuleModifier(ctxP1);
       const p2Rule = p2Effect.getRuleModifier(ctxP2);
 
       const lowerWins = (p1Rule === 'lower_wins' || p2Rule === 'lower_wins');
 
       if (lowerWins) {
-        this.log('ルール変更: 小さい方が勝つ！');
+        events.push({ type: 'rule_change', message: 'ルール変更: 小さい方が勝つ！', payload: { rule: 'lower_wins' } });
         if (p1Power < p2Power) winner = 'p1';
         else if (p2Power < p1Power) winner = 'p2';
         else winner = 'draw';
@@ -170,11 +167,15 @@ export class GameEngine {
     if (winner === 'p1' && p1Base < p2Base) isLowerWinnings = true;
     if (winner === 'p2' && p2Base < p1Base) isLowerWinnings = true;
 
-    if (isLowerWinnings) this.log('下剋上！(元々の数値が小さい方が勝利)');
+    if (isLowerWinnings) {
+      events.push({ type: 'rule_change', message: '下剋上！(元々の数値が小さい方が勝利)', payload: { rule: 'gekokujo' } });
+    }
 
     const battleResult: BattleResult = {
-      winner, p1Power, p2Power, isLowerWinnings, history: []
+      winner, p1Power, p2Power, isLowerWinnings
     };
+
+    events.push({ type: 'battle_end', payload: battleResult });
 
     // 取引（Transaction）計算
     let transaction: RewardTransaction = { p1Change: 0, p2Change: 0, stockChange: 0 };
@@ -191,47 +192,42 @@ export class GameEngine {
         else { transaction.p2Change = 1; transaction.stockChange = -1; }
       }
 
-      // 効果によるオーバーライド (モードレッド, ケイ, ランスロット等)
-      // 勝者の効果と敗者の効果（ペナルティ/防御）を順に適用
-
-      // 勝者の効果チェック
+      // 効果によるオーバーライド
       const winnerEffect = winner === 'p1' ? p1Effect : p2Effect;
       const winnerCtx = winner === 'p1' ? ctxP1 : ctxP2;
 
       const winnerOverride = winnerEffect.onResolveReward(winnerCtx, battleResult);
-      if (winnerOverride) {
-        transaction = winnerOverride;
-      }
+      if (winnerOverride) transaction = winnerOverride;
 
-      // 敗者の効果チェック (防御/ペナルティ)
-      // 例: ガラハッド, ランスロット
       const loserEffect = winner === 'p1' ? p2Effect : p1Effect;
       const loserCtx = winner === 'p1' ? ctxP2 : ctxP1;
 
       const loserOverride = loserEffect.onResolveReward(loserCtx, battleResult);
-      if (loserOverride) {
-        // 敗者の効果があればそれを最終結果とする（防御優先、ペナルティ上書き）
-        // 特定の組み合わせで競合する場合、ここでの優先順位が適用される。
-        transaction = loserOverride;
-      }
+      if (loserOverride) transaction = loserOverride;
     }
 
-    // 取引実行
-    this.gameState.players.p1.grails += transaction.p1Change;
-    this.gameState.players.p2.grails += transaction.p2Change;
-    this.gameState.stockGrails += transaction.stockChange;
+    // 取引実行 & Event生成
+    if (transaction.p1Change !== 0) {
+      this.gameState.players.p1.grails += transaction.p1Change;
+      events.push({ type: 'grail_transfer', payload: { player: 'p1', amount: transaction.p1Change, reason: 'reward' } });
+    }
+    if (transaction.p2Change !== 0) {
+      this.gameState.players.p2.grails += transaction.p2Change;
+      events.push({ type: 'grail_transfer', payload: { player: 'p2', amount: transaction.p2Change, reason: 'reward' } });
+    }
+    if (transaction.stockChange !== 0) {
+      this.gameState.stockGrails += transaction.stockChange;
+    }
 
     // 0未満にはならないように制限
     if (this.gameState.players.p1.grails < 0) this.gameState.players.p1.grails = 0;
     if (this.gameState.players.p2.grails < 0) this.gameState.players.p2.grails = 0;
 
-    this.log(`結果: ${winner === 'draw' ? '引き分け' : (winner === 'p1' ? 'P1' : 'P2') + ' の勝利!'} 聖杯: P1(${this.gameState.players.p1.grails}) P2(${this.gameState.players.p2.grails})`);
-
-    // 5. ターン終了時フック (ベディヴィアなど)
+    // 5. ターン終了時フック (ベディヴィアなど) - 必要ならイベント生成？
     p1Effect.onTurnEnd(ctxP1, battleResult);
     p2Effect.onTurnEnd(ctxP2, battleResult);
 
-    // 勝利カード記録 (最終同点時用)
+    // 勝利カード記録
     if (winner === 'p1') this.gameState.players.p1.wonCards.push(p2CardId);
     if (winner === 'p2') this.gameState.players.p2.wonCards.push(p1CardId);
 
@@ -240,39 +236,34 @@ export class GameEngine {
     this.gameState.players.p2.playedCard = null;
 
     if (this.gameState.turn >= MAX_TURNS) {
-      this.checkGameOver();
+      // 終了判定はUI側/MockServer側で checkGameOver を呼ぶか、あるいはここで呼ぶか。
+      // ここではGameEngineは純粋にターンを解決するだけにし、GameOverチェックは呼び出し元が行うのが疎結合。
+      // ただし、ターンカウンターは更新するか？
+      // 5ターン目終わったらインクリメントせずにそのまま
     } else {
       this.gameState.turn++;
       this.gameState.phase = 'selection';
     }
+
+    return { result: battleResult, events };
   }
 
-  private checkGameOver(): void {
+  checkGameOver(): PlayerId | 'draw' {
     this.gameState.phase = 'gameover';
     const p1 = this.gameState.players.p1;
     const p2 = this.gameState.players.p2;
 
-    this.log('ゲーム終了! 結果判定中...');
-
     if (p1.grails > p2.grails) this.gameState.winner = 'p1';
     else if (p2.grails > p1.grails) this.gameState.winner = 'p2';
     else {
-      // 聖杯数が同じ場合、武勲（倒した相手のカード数値の合計）で判定
+      // 武勲判定
       const p1Score = p1.wonCards.reduce((sum, id) => sum + CARDS[id].basePower, 0);
       const p2Score = p2.wonCards.reduce((sum, id) => sum + CARDS[id].basePower, 0);
-      this.log(`聖杯同数! 武勲判定: P1(${p1Score}) vs P2(${p2Score})`);
 
       if (p1Score > p2Score) this.gameState.winner = 'p1';
       else if (p2Score > p1Score) this.gameState.winner = 'p2';
       else this.gameState.winner = 'draw';
     }
-
-    this.log(`最終勝者: ${this.gameState.winner === 'draw' ? '引き分け' : this.gameState.winner?.toUpperCase()}`);
-  }
-
-  private log(message: string) {
-    this.gameState.logs.push(message);
-    // Keep log size managed?
-    if (this.gameState.logs.length > 50) this.gameState.logs.shift();
+    return this.gameState.winner!;
   }
 }

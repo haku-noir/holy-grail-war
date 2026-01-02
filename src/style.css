@@ -32,14 +32,14 @@ body {
   width: 100%;
 }
 
-/* Layout */
+/* レイアウト */
 .game-layout {
   display: grid;
   grid-template-columns: 300px 1fr;
   height: 100%;
 }
 
-/* Side Panel */
+/* サイドパネル */
 .side-panel {
   background: var(--panel-bg);
   backdrop-filter: blur(10px);
@@ -94,7 +94,7 @@ body {
   font-weight: bold;
 }
 
-/* Board */
+/* ボード */
 .board {
   display: flex;
   flex-direction: column;
@@ -108,7 +108,7 @@ body {
   background-size: 50px 50px;
 }
 
-/* Player Areas */
+/* プレイヤーエリア */
 .player-area {
   background: rgba(255, 255, 255, 0.02);
   border-radius: 12px;
@@ -150,7 +150,7 @@ body {
   perspective: 1000px;
 }
 
-/* Battle Area */
+/* バトルエリア */
 .battle-area {
   flex-grow: 1;
   display: flex;
@@ -189,7 +189,7 @@ body {
   text-shadow: 0 0 10px black;
 }
 
-/* Cards */
+/* カード */
 .card {
   width: 110px;
   height: 170px;
@@ -248,7 +248,7 @@ body {
   line-height: 1.2;
 }
 
-/* Overlay */
+/* オーバーレイ */
 .overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -291,3 +291,71 @@ button:hover {
   color: black;
   box-shadow: 0 0 20px var(--accent-gold);
 }
+
+/* アニメーションクラス */
+ 
+ /* カード移動 */
+@keyframes moveToSlotP1 {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--tx), var(--ty)) scale(1.1); opacity: 1; }
+}
+
+@keyframes moveToSlotP2 {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--tx), var(--ty)) scale(1.1); opacity: 1; }
+}
+
+.animating-card {
+  position: fixed !important;
+  z-index: 1000;
+  transition: all 0.5s ease-in-out;
+  pointer-events: none;
+}
+
+/* バトルオーバーレイ */
+#battle-overlay-text {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  font-size: 4rem;
+  font-weight: bold;
+  color: var(--accent-red);
+  text-shadow: 0 0 20px black;
+  z-index: 200;
+  pointer-events: none;
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+#battle-overlay-text.show {
+  transform: translate(-50%, -50%) scale(1);
+}
+
+/* 結果テキスト */
+.battle-result-text.win { color: var(--accent-gold); }
+.battle-result-text.lose { color: var(--accent-blue); }
+.battle-result-text.draw { color: var(--text-secondary); }
+
+/* 聖杯アニメーション */
+.flying-grail {
+  position: fixed;
+  font-size: 2rem;
+  z-index: 2000;
+  pointer-events: none;
+  transition: all 1s ease-in-out;
+}
+
+/* スロットハイライト */
+.battle-slot.active {
+  border-color: var(--accent-gold);
+  box-shadow: 0 0 15px rgba(255, 215, 0, 0.3);
+}
+
+.card.face-up {
+  /* Ensure flip animation if needed */
+  transform-style: preserve-3d;
+}
+
+/* ユーティリティ */
+.hidden { display: none !important; }
+.fade-in { animation: fadeIn 0.5s forwards; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }

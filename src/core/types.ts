@@ -28,22 +28,37 @@ export interface GameState {
   winner: PlayerId | 'draw' | null; // 最終結果用
 }
 
+// イベントシステム
+export type BattleEventType = 
+  | 'text_log' 
+  | 'effect_activation' 
+  | 'rule_change' 
+  | 'grail_transfer'
+  | 'turn_start'
+  | 'battle_start'
+  | 'battle_end';
+
+export interface BattleEvent {
+  type: BattleEventType;
+  message?: string; // テキストログまたはフォールバック用
+  payload?: any;    // アニメーション用の柔軟なペイロード
+}
+
 // バトル結果
 export interface BattleResult {
   winner: PlayerId | 'draw';
   p1Power: number;
   p2Power: number;
-  isLowerWinnings: boolean; // "下剋上"（小さい方が勝つルールまたは状況）
-  history: string[]; // 詳細ログ
+  isLowerWinnings: boolean; // "下剋上"
 }
 
 export interface RewardTransaction {
   p1Change: number;
   p2Change: number;
-  stockChange: number; // ストックの増減（通常はバランス調整用だが追跡用に保持）
+  stockChange: number; 
 }
 
-// Effect System Types
+// エフェクトシステム型定義
 export type RuleModifier = 'lower_wins';
 
 export interface BattleContext {
@@ -52,7 +67,7 @@ export interface BattleContext {
   p1State: PlayerState;
   p2State: PlayerState;
   gameState: GameState;
-  isP1: boolean; // このロジックを実行している側の視点
+  isP1: boolean;
 }
 
 export interface CardEffect {
