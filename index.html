@@ -11,13 +11,46 @@
   </head>
   <body>
     <div id="app">
-      <!-- Game Over Overlay -->
-      <div id="game-over-overlay" class="overlay hidden">
-        <h1 id="winner-text">Winner: P1</h1>
-        <button id="restart-btn">Play Again</button>
+      <!-- Title Screen -->
+      <div id="title-screen" class="screen">
+        <h1 class="main-title">Holy Grail War</h1>
+        <div class="subtitle">Round Table 13</div>
+        <div class="input-group">
+          <input type="text" id="player-name-input" placeholder="Enter Player Name" value="Player" />
+        </div>
+        <div class="menu-buttons">
+          <button id="btn-cpu-battle" class="menu-btn">CPU Battle</button>
+          <button id="btn-online-battle" class="menu-btn">Online PvP</button>
+        </div>
       </div>
 
-      <div class="game-layout">
+      <!-- Lobby Screen -->
+      <div id="lobby-screen" class="screen hidden">
+        <h2>Online Lobby</h2>
+        <div class="lobby-controls">
+          <button id="btn-create-room" class="menu-btn small">Create Room</button>
+          <button id="btn-refresh-rooms" class="menu-btn small">Refresh</button>
+          <button id="btn-back-title" class="menu-btn small secondary">Back</button>
+        </div>
+        <div id="room-list" class="room-list">
+          <!-- Rooms will be populated here -->
+          <div class="room-item empty-message">No rooms found. Create one!</div>
+        </div>
+        <div id="waiting-message" class="hidden">Waiting for opponent...</div>
+      </div>
+
+      <!-- Game Screen -->
+      <div id="game-screen" class="screen hidden">
+        <!-- Game Over Overlay -->
+        <div id="game-over-overlay" class="overlay hidden">
+          <h1 id="winner-text">Winner: P1</h1>
+          <div class="game-over-buttons">
+            <button id="restart-btn" class="menu-btn small">Rematch</button>
+            <button id="return-title-btn" class="menu-btn small secondary">Return to Title</button>
+          </div>
+        </div>
+
+        <div class="game-layout">
         <!-- Left: Side Panel -->
         <aside class="side-panel">
           <h2 class="game-title">Holy Grail War</h2>
@@ -67,6 +100,7 @@
 
         </main>
       </div>
+      </div> <!-- End of game-screen -->
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

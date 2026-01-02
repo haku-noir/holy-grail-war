@@ -30,9 +30,162 @@ body {
 #app {
   height: 100%;
   width: 100%;
+  position: relative;
 }
 
-/* レイアウト */
+/* 画面共通 */
+.screen {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: radial-gradient(circle at center, #1b2028 0%, #0d1117 100%);
+  z-index: 50;
+  transition: opacity 0.5s ease;
+}
+
+.screen.hidden {
+  opacity: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* タイトル画面 */
+#title-screen {
+  gap: 2rem;
+}
+
+.main-title {
+  font-family: 'Cinzel', serif;
+  font-size: 5rem;
+  color: var(--accent-gold);
+  text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+  margin-bottom: 0;
+}
+
+.subtitle {
+  font-family: 'Lato', sans-serif;
+  font-size: 1.5rem;
+  color: var(--text-secondary);
+  letter-spacing: 5px;
+  margin-top: -1.5rem;
+}
+
+.input-group input {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--accent-gold);
+  padding: 1rem 2rem;
+  font-size: 1.2rem;
+  color: var(--text-primary);
+  border-radius: 4px;
+  text-align: center;
+  font-family: var(--font-main);
+  outline: none;
+}
+
+.input-group input:focus {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.2);
+}
+
+.menu-buttons {
+  display: flex;
+  gap: 2rem;
+  margin-top: 1rem;
+}
+
+.menu-btn {
+  /* Inherits basic button styles but ensures specifics */
+  min-width: 200px;
+}
+
+.menu-btn.small {
+  padding: 0.8rem 1.5rem;
+  font-size: 1rem;
+  min-width: auto;
+}
+
+.menu-btn.secondary {
+  border-color: var(--text-secondary);
+  color: var(--text-secondary);
+}
+
+.menu-btn.secondary:hover {
+  background: var(--text-secondary);
+  color: var(--bg-color);
+  box-shadow: 0 0 10px var(--text-secondary);
+}
+
+/* ロビー画面 */
+#lobby-screen {
+  gap: 1.5rem;
+}
+
+#lobby-screen h2 {
+  font-family: var(--font-title);
+  color: var(--accent-gold);
+  font-size: 3rem;
+}
+
+.lobby-controls {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.room-list {
+  width: 600px;
+  height: 400px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 215, 0, 0.2);
+  border-radius: 8px;
+  overflow-y: auto;
+  padding: 1rem;
+}
+
+.room-item {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1rem;
+  margin-bottom: 0.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.room-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.room-item button { /* Join button inside list */
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+}
+
+#waiting-message {
+  font-size: 1.5rem;
+  color: var(--text-secondary);
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.5; }
+  50% { opacity: 1; }
+  100% { opacity: 0.5; }
+}
+
+.game-over-buttons {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+/* レイアウト - Adjusted for game-screen wrap */
 .game-layout {
   display: grid;
   grid-template-columns: 300px 1fr;

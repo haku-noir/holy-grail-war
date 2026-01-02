@@ -6,3 +6,13 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
+  
+  server:
+    build: ./server
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./server:/app
+      - ./src/core:/app/src/core
+      - /app/node_modules
+

@@ -1,13 +1,23 @@
 import { MockServer } from './core/server/mock_server';
+import { SocketClient } from './core/server/socket_client'; // Import Client
+import type { ServerAPI } from './core/server/api';
 import { CARDS } from './core/cards';
 import type { CardId, BattleEvent } from './core/types';
 import { generateBattleLog } from './ui_helpers';
 
-// 状態
-let server: MockServer;
+// --- State ---
+let server: ServerAPI;
 let isAnimating = false;
+let playerName = "Player";
 
-// DOM要素
+// --- Screens ---
+const screens = {
+  title: document.getElementById('title-screen')!,
+  lobby: document.getElementById('lobby-screen')!,
+  game: document.getElementById('game-screen')!
+};
+
+// --- DOM Elements (Game) ---
 const p1HandEl = document.getElementById('p1-hand')!;
 const p2HandEl = document.getElementById('p2-hand')!;
 const p1SlotEl = document.getElementById('p1-slot')!;
@@ -20,17 +30,124 @@ const logContainerEl = document.getElementById('log-container')!;
 const gameOverOverlay = document.getElementById('game-over-overlay')!;
 const winnerText = document.getElementById('winner-text')!;
 const restartBtn = document.getElementById('restart-btn')!;
+const returnTitleBtn = document.getElementById('return-title-btn')!; // New
 const battleResultText = document.getElementById('battle-result-text')!;
 
-// バトル開始/エフェクト用オーバーレイ（HTMLにない場合は動的に作成）
+// --- DOM Elements (Menu) ---
+const nameInput = document.getElementById('player-name-input') as HTMLInputElement;
+const btnCpuBattle = document.getElementById('btn-cpu-battle')!;
+const btnOnlineBattle = document.getElementById('btn-online-battle')!;
+const btnCreateRoom = document.getElementById('btn-create-room')!;
+const btnRefreshRooms = document.getElementById('btn-refresh-rooms')!;
+const btnBackTitle = document.getElementById('btn-back-title')!;
+const roomListEl = document.getElementById('room-list')!;
+const waitingMessage = document.getElementById('waiting-message')!;
+
+// --- Overlay for effects ---
 let battleOverlayText: HTMLElement;
 
-// 初期化
-function initGame() {
+// --- Helper: Screen Navigation ---
+function showScreen(screenName: keyof typeof screens) {
+  Object.values(screens).forEach(el => el.classList.add('hidden'));
+  screens[screenName].classList.remove('hidden');
+}
+
+// --- Initialization ---
+function initApp() {
+  // Event Listeners
+  btnCpuBattle.onclick = startCpuBattle;
+  btnOnlineBattle.onclick = showLobby;
+  btnCreateRoom.onclick = createRoom;
+  btnRefreshRooms.onclick = refreshRoomList;
+  btnBackTitle.onclick = () => showScreen('title');
+  
+  restartBtn.onclick = () => {
+    // For online, this might need a rematch request
+    server.resetGame().then(() => initGame());
+  };
+  
+  returnTitleBtn.onclick = () => {
+      // Disconnect if needed
+      // TODO: Proper disconnect logic
+      showScreen('title');
+  };
+
+  // Check backend availability for online? (Optional)
+}
+
+async function startCpuBattle() {
+  playerName = nameInput.value || "Player";
   server = new MockServer();
+  await initGame();
+  showScreen('game');
+}
+
+async function showLobby() {
+  playerName = nameInput.value || "Player";
+  // Initialize Socket Client if needed
+  if (!(server instanceof SocketClient)) {
+     server = new SocketClient();
+     // Setup global listeners if any
+     (server as SocketClient).onGameStart((data) => {
+         console.log("Game Start!", data);
+         waitingMessage.classList.add('hidden');
+         // data should contain initial gameState.
+         // If server doesn't send it yet, we might have an issue for online.
+         // But for now let's assume data has it or initGame fetches it (which resetGame on socket client returns empty).
+         // TODO: Ensure Server sends gameState in game_start
+         initGame(data.gameState); 
+         showScreen('game');
+     });
+  }
+  showScreen('lobby');
+  refreshRoomList();
+}
+
+async function refreshRoomList() {
+    if (server instanceof SocketClient) {
+        roomListEl.innerHTML = '<div class="room-item">Loading...</div>';
+        const rooms = await server.listRooms();
+        renderRoomList(rooms);
+    }
+}
+
+function renderRoomList(rooms: any[]) {
+    roomListEl.innerHTML = '';
+    if (rooms.length === 0) {
+        roomListEl.innerHTML = '<div class="room-item empty-message">No rooms found. Create one!</div>';
+        return;
+    }
+    rooms.forEach(room => {
+        const item = document.createElement('div');
+        item.className = 'room-item';
+        item.innerHTML = `
+            <span>${room.name}</span>
+            <button class="menu-btn small" data-id="${room.id}">Join</button>
+        `;
+        item.querySelector('button')!.onclick = () => joinRoom(room.id);
+        roomListEl.appendChild(item);
+    });
+}
+
+async function createRoom() {
+    if (server instanceof SocketClient) {
+        await server.createRoom(playerName);
+        waitingMessage.classList.remove('hidden');
+        // Disable controls while waiting
+    }
+}
+
+function joinRoom(roomId: string) {
+    if (server instanceof SocketClient) {
+        server.joinRoom(roomId, playerName);
+    }
+}
+
+// --- Game Logic (Refactored) ---
+async function initGame(initialState?: any) {
   isAnimating = false;
   
-  // オーバーレイ要素の存在確認
+  // ensure overlay
   if (!document.getElementById('battle-overlay-text')) {
     const el = document.createElement('div');
     el.id = 'battle-overlay-text';
@@ -42,23 +159,29 @@ function initGame() {
   battleResultText.textContent = '';
   battleResultText.className = 'battle-result-text'; 
   
-  // スロットのクリア
   p1SlotEl.innerHTML = '<div class="card-placeholder">Your Slot</div>';
   p2SlotEl.innerHTML = '<div class="card-placeholder">Enemy Slot</div>';
   p1SlotEl.classList.remove('active');
   p2SlotEl.classList.remove('active');
+  
+  logContainerEl.innerHTML = ''; // Clear logs on new game
 
-  updateDisplay(server['engine'].gameState); // 初回描画のためにprivateなengine状態にアクセス（実際のアプリではresponse.gameStateを使用）
+  let state = initialState;
+  if (!state) {
+      // If no state provided, try to fetch from server (mainly for CPU mode)
+      state = await server.resetGame();
+  }
+
+  updateDisplay(state); 
 }
 
-// 描画関数 (更新のみ)
 function updateDisplay(state: any) {
   turnCountEl.textContent = state.turn.toString();
   phaseTextEl.textContent = state.phase.toUpperCase();
   p1GrailsEl.textContent = state.players.p1.grails.toString();
   p2GrailsEl.textContent = state.players.p2.grails.toString();
 
-  // P1の手札
+  // P1 Hand
   p1HandEl.innerHTML = '';
   state.players.p1.hand.forEach((cardId: CardId) => {
     const cardEl = createCardElement(cardId, true);
@@ -66,7 +189,7 @@ function updateDisplay(state: any) {
     p1HandEl.appendChild(cardEl);
   });
 
-  // P2の手札（非公開）
+  // P2 Hand
   p2HandEl.innerHTML = '';
   state.players.p2.hand.forEach(() => {
     const cardEl = document.createElement('div');
@@ -96,20 +219,18 @@ function addLog(message: string, isImportant = false) {
   div.className = 'log-entry';
   if (isImportant) div.style.color = 'var(--accent-gold)';
   div.textContent = message;
-  logContainerEl.insertBefore(div, logContainerEl.firstChild); // Prepend
+  logContainerEl.insertBefore(div, logContainerEl.firstChild);
 }
 
-// アニメーション付きカードプレイ
+// --- Card Interaction ---
 async function onCardClick(cardId: CardId, cardEl: HTMLElement) {
   if (isAnimating) return;
   isAnimating = true;
 
-  // 1. P1カードをスロットへ移動
-  // アニメーション用の位置を取得
+  // 1. Animate to Slot
   const rect = cardEl.getBoundingClientRect();
   const slotRect = p1SlotEl.getBoundingClientRect();
   
-  // アニメーション用のクローンを作成
   const clone = cardEl.cloneNode(true) as HTMLElement;
   clone.style.position = 'fixed';
   clone.style.left = `${rect.left}px`;
@@ -120,46 +241,41 @@ async function onCardClick(cardId: CardId, cardEl: HTMLElement) {
   clone.classList.add('animating-card');
   document.body.appendChild(clone);
 
-  // 元の要素を隠す
   cardEl.style.opacity = '0';
 
-  // アニメーション
   const tx = slotRect.left - rect.left + (slotRect.width - rect.width) / 2;
   const ty = slotRect.top - rect.top + (slotRect.height - rect.height) / 2;
 
   clone.style.transform = `translate(${tx}px, ${ty}px)`;
 
-  await new Promise(r => setTimeout(r, 500)); // 移動待ち
+  await new Promise(r => setTimeout(r, 500));
 
-  // スロットに配置
   p1SlotEl.innerHTML = '';
   const slotCard = createCardElement(cardId, true);
   p1SlotEl.appendChild(slotCard);
   clone.remove();
 
-  // 2. サーバーリクエスト（P2思考シミュレーション）
+  // 2. Server Request
   phaseTextEl.textContent = "WAITING...";
   
   const response = await server.playCard('p1', cardId);
 
-  // 3. 敵カード出現（アニメーション）
+  // 3. Opponent Animation
   const p2CardId = response.opponentCard;
   p2SlotEl.innerHTML = '';
-  // 裏向きで開始して表にするか？それとも裏向きで飛んでくるか？
-  // P2の手札位置に裏向きカードを生成して飛ばす
+  
   const enemyHandRect = p2HandEl.getBoundingClientRect();
   const enemySlotRect = p2SlotEl.getBoundingClientRect();
 
   const enemyClone = document.createElement('div');
   enemyClone.className = 'card face-down animating-card';
   enemyClone.textContent = '?';
-  enemyClone.style.left = `${enemyHandRect.left + enemyHandRect.width / 2 - 50}px`; // おおよその中心
+  enemyClone.style.left = `${enemyHandRect.left + enemyHandRect.width / 2 - 50}px`; 
   enemyClone.style.top = `${enemyHandRect.top}px`;
   enemyClone.style.width = '110px';
   enemyClone.style.height = '170px';
   document.body.appendChild(enemyClone);
 
-  // 敵のアニメーション
   const etx = enemySlotRect.left - parseFloat(enemyClone.style.left);
   const ety = enemySlotRect.top - parseFloat(enemyClone.style.top);
   
@@ -169,35 +285,34 @@ async function onCardClick(cardId: CardId, cardEl: HTMLElement) {
 
   await new Promise(r => setTimeout(r, 600));
 
-  // 結果を配置
   p2SlotEl.innerHTML = '';
-  const p2SlotCard = createCardElement(p2CardId, true); // 表向きで作成
+  const p2SlotCard = createCardElement(p2CardId, true);
   p2SlotEl.appendChild(p2SlotCard);
   enemyClone.remove();
 
-  // 4. バトル開始アニメーション
+  // 4. Battle Start
   battleOverlayText.textContent = "BATTLE!";
   battleOverlayText.classList.add('show');
   await new Promise(r => setTimeout(r, 1000));
   battleOverlayText.classList.remove('show');
 
-  // 5. イベントとログの処理
+  // 5. Events
   for (const event of response.events) {
     await processEvent(event);
   }
 
-  // 概要ログの生成
-  const logMessages = generateBattleLog(response.battleResult, server['engine'].gameState.turn, cardId, p2CardId);
+  // Logs
+  const logMessages = generateBattleLog(response.battleResult, server instanceof MockServer ? server['engine'].gameState.turn : response.gameState.turn, cardId, p2CardId);
   logMessages.forEach(msg => addLog(msg));
 
-  // 6. 結果アニメーション
+  // 6. Result
   const winner = response.battleResult.winner;
   battleResultText.textContent = winner === 'draw' ? 'DRAW' : (winner === 'p1' ? 'WIN!' : 'LOSE...');
   battleResultText.className = `battle-result-text ${winner === 'draw' ? 'draw' : (winner === 'p1' ? 'win' : 'lose')} fade-in`;
 
   await new Promise(r => setTimeout(r, 1500));
 
-  // 7. クリーンアップと次ターン
+  // 7. Cleanup
   battleResultText.classList.remove('fade-in');
   battleResultText.textContent = '';
   p1SlotEl.innerHTML = '<div class="card-placeholder">Your Slot</div>';
@@ -206,19 +321,16 @@ async function onCardClick(cardId: CardId, cardEl: HTMLElement) {
   updateDisplay(response.gameState);
   isAnimating = false;
 
-  // ゲーム終了判定（状態または明示的チェック）
-  // エンジンは終了時にphase='gameover'を返すが、ここで確認する
   if (response.gameState.phase === 'gameover') {
-    await new Promise(r => setTimeout(r, 1000)); // "一泊"
+    await new Promise(r => setTimeout(r, 1000));
     showGameOver(response.gameState);
   }
 }
 
 async function processEvent(event: BattleEvent) {
-  // 特定のイベントでの一時停止
   if (event.type === 'effect_activation') {
     addLog(`[EFFECT] ${event.message}`, true);
-    p1SlotEl.classList.add('active'); // 点滅
+    p1SlotEl.classList.add('active');
     p2SlotEl.classList.add('active');
     await new Promise(r => setTimeout(r, 500));
     p1SlotEl.classList.remove('active');
@@ -227,9 +339,8 @@ async function processEvent(event: BattleEvent) {
     addLog(`[RULE] ${event.message}`, true);
     await new Promise(r => setTimeout(r, 500));
   } else if (event.type === 'grail_transfer') {
-    // 聖杯飛行アニメーション
     const targetEl = event.payload.player === 'p1' ? p1GrailsEl : p2GrailsEl;
-    const startEl = event.payload.player === 'p1' ? p2SlotEl : p1SlotEl; // 簡易的な位置推定
+    const startEl = event.payload.player === 'p1' ? p2SlotEl : p1SlotEl;
     flyGrail(startEl, targetEl);
     await new Promise(r => setTimeout(r, 800));
   }
@@ -262,9 +373,6 @@ function showGameOver(state: any) {
   winnerText.textContent = `${winner} (P1: ${state.players.p1.grails} - P2: ${state.players.p2.grails})`;
 }
 
-restartBtn.onclick = () => {
-    server.resetGame().then(() => initGame());
-};
-
 // Start
-initGame();
+initApp();
+
