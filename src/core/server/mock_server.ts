@@ -11,7 +11,7 @@ export class MockServer implements ServerAPI {
     this.engine = new GameEngine();
   }
 
-  async playCard(playerId: 'p1', cardId: CardId): Promise<TurnResponse> {
+  async playCard(playerId: 'p1' | 'p2', cardId: CardId): Promise<TurnResponse> {
     // 1. ネットワーク遅延・CPU思考のシミュレーション
     await new Promise(resolve => setTimeout(resolve, this.latencyMs));
 

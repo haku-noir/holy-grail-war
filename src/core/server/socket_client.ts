@@ -12,7 +12,7 @@ export class SocketClient implements ServerAPI {
     this.socket = io(serverUrl);
 
     this.socket.on('connect', () => {
-      console.log('Connected to server:', this.socket.id);
+      console.log('サーバーに接続しました:', this.socket.id);
     });
 
     this.socket.on('turn_result', (response: TurnResponse) => {
@@ -23,11 +23,11 @@ export class SocketClient implements ServerAPI {
     });
 
     this.socket.on('disconnect', () => {
-        console.log('Disconnected from server');
+        console.log('サーバーから切断されました');
     });
   }
 
-  // Room Management Methods
+  // ルーム管理メソッド
   async createRoom(playerName: string): Promise<string> {
     return new Promise((resolve) => {
       this.socket.emit('create_room', playerName);
@@ -53,14 +53,14 @@ export class SocketClient implements ServerAPI {
 
   onGameStart(callback: (data: any) => void) {
       this.socket.on('game_start', (data) => {
-          this.currentRoomId = data.roomId; // Ensure room ID is set
+          this.currentRoomId = data.roomId; // ルームIDが設定されていることを確認
           callback(data);
       });
   }
 
-  // Game API
-  async playCard(playerId: 'p1', cardId: CardId): Promise<TurnResponse> {
-    if (!this.currentRoomId) throw new Error("Not in a room");
+  // ゲームAPI
+  async playCard(playerId: 'p1' | 'p2', cardId: CardId): Promise<TurnResponse> {
+    if (!this.currentRoomId) throw new Error("ルームに入っていません");
     
     return new Promise((resolve) => {
         this.resolveTurnFn = resolve;
@@ -73,10 +73,16 @@ export class SocketClient implements ServerAPI {
   }
 
   async resetGame(): Promise<GameState> {
-    // Online game reset is handled by server event basically, but for interface consistency:
+    // オンラインゲームのリセットは基本的にサーバーイベントで処理されますが、インターフェースの一貫性のために:
     return new Promise((resolve) => {
-         // TODO: Implement rematch logic
-         resolve({} as GameState); // Placeholder
+         // TODO: 再戦ロジックの実装
+         resolve({} as GameState); // プレースホルダー
     });
+  }
+
+  getMyPlayerId(p1SocketId: string, p2SocketId: string): 'p1' | 'p2' {
+      if (this.socket.id === p1SocketId) return 'p1';
+      if (this.socket.id === p2SocketId) return 'p2';
+      return 'p1'; // フォールバック? ロジックが正しければ発生しないはず
   }
 }

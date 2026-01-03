@@ -16,7 +16,7 @@ export interface TurnResponse {
 
 export interface ServerAPI {
   // カードをプレイし、ターン解決まで行う
-  playCard(playerId: 'p1', cardId: CardId): Promise<TurnResponse>;
+  playCard(playerId: 'p1' | 'p2', cardId: CardId): Promise<TurnResponse>;
 
   // ゲームリセット
   resetGame(): Promise<GameState>;

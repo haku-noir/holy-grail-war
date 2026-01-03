@@ -1,23 +1,24 @@
 import { MockServer } from './core/server/mock_server';
-import { SocketClient } from './core/server/socket_client'; // Import Client
+import { SocketClient } from './core/server/socket_client'; // Clientのインポート
 import type { ServerAPI } from './core/server/api';
 import { CARDS } from './core/cards';
 import type { CardId, BattleEvent } from './core/types';
 import { generateBattleLog } from './ui_helpers';
 
-// --- State ---
+// --- 状態 ---
 let server: ServerAPI;
 let isAnimating = false;
 let playerName = "Player";
+let myPlayerId: 'p1' | 'p2' = 'p1'; // デフォルトはp1 (CPUモード)
 
-// --- Screens ---
+// --- 画面 ---
 const screens = {
   title: document.getElementById('title-screen')!,
   lobby: document.getElementById('lobby-screen')!,
   game: document.getElementById('game-screen')!
 };
 
-// --- DOM Elements (Game) ---
+// --- DOM要素 (ゲーム) ---
 const p1HandEl = document.getElementById('p1-hand')!;
 const p2HandEl = document.getElementById('p2-hand')!;
 const p1SlotEl = document.getElementById('p1-slot')!;
@@ -30,10 +31,10 @@ const logContainerEl = document.getElementById('log-container')!;
 const gameOverOverlay = document.getElementById('game-over-overlay')!;
 const winnerText = document.getElementById('winner-text')!;
 const restartBtn = document.getElementById('restart-btn')!;
-const returnTitleBtn = document.getElementById('return-title-btn')!; // New
+const returnTitleBtn = document.getElementById('return-title-btn')!;
 const battleResultText = document.getElementById('battle-result-text')!;
 
-// --- DOM Elements (Menu) ---
+// --- DOM要素 (メニュー) ---
 const nameInput = document.getElementById('player-name-input') as HTMLInputElement;
 const btnCpuBattle = document.getElementById('btn-cpu-battle')!;
 const btnOnlineBattle = document.getElementById('btn-online-battle')!;
@@ -43,18 +44,18 @@ const btnBackTitle = document.getElementById('btn-back-title')!;
 const roomListEl = document.getElementById('room-list')!;
 const waitingMessage = document.getElementById('waiting-message')!;
 
-// --- Overlay for effects ---
+// --- 効果用オーバーレイ ---
 let battleOverlayText: HTMLElement;
 
-// --- Helper: Screen Navigation ---
+// --- ヘルパー: 画面遷移 ---
 function showScreen(screenName: keyof typeof screens) {
   Object.values(screens).forEach(el => el.classList.add('hidden'));
   screens[screenName].classList.remove('hidden');
 }
 
-// --- Initialization ---
+// --- 初期化 ---
 function initApp() {
-  // Event Listeners
+  // イベントリスナー
   btnCpuBattle.onclick = startCpuBattle;
   btnOnlineBattle.onclick = showLobby;
   btnCreateRoom.onclick = createRoom;
@@ -62,40 +63,42 @@ function initApp() {
   btnBackTitle.onclick = () => showScreen('title');
   
   restartBtn.onclick = () => {
-    // For online, this might need a rematch request
-    server.resetGame().then(() => initGame());
+    // オンラインの場合、再戦リクエストが必要かもしれません
+    server.resetGame().then(() => initGame(undefined, myPlayerId));
   };
   
   returnTitleBtn.onclick = () => {
-      // Disconnect if needed
-      // TODO: Proper disconnect logic
+      // 必要に応じて切断処理
+      // TODO: 適切な切断ロジック。今のところはタイトルをリロードするだけ。
       showScreen('title');
   };
-
-  // Check backend availability for online? (Optional)
 }
 
 async function startCpuBattle() {
   playerName = nameInput.value || "Player";
   server = new MockServer();
-  await initGame();
+  myPlayerId = 'p1'; // CPU戦は常にP1
+  await initGame(undefined, 'p1');
   showScreen('game');
 }
 
 async function showLobby() {
   playerName = nameInput.value || "Player";
-  // Initialize Socket Client if needed
+  // 必要に応じてSocket Clientを初期化
   if (!(server instanceof SocketClient)) {
      server = new SocketClient();
-     // Setup global listeners if any
+     // グローバルリスナーの設定があればここで行う
      (server as SocketClient).onGameStart((data) => {
-         console.log("Game Start!", data);
+         console.log("ゲーム開始!", data);
          waitingMessage.classList.add('hidden');
-         // data should contain initial gameState.
-         // If server doesn't send it yet, we might have an issue for online.
-         // But for now let's assume data has it or initGame fetches it (which resetGame on socket client returns empty).
-         // TODO: Ensure Server sends gameState in game_start
-         initGame(data.gameState); 
+         
+         // 自分のIDを決定
+         const client = server as SocketClient;
+         // data: { roomId, p1: socketId, p2: socketId, gameState }
+         myPlayerId = client.getMyPlayerId(data.p1, data.p2);
+         console.log(`私は ${myPlayerId} です`);
+
+         initGame(data.gameState, myPlayerId); 
          showScreen('game');
      });
   }
@@ -105,7 +108,7 @@ async function showLobby() {
 
 async function refreshRoomList() {
     if (server instanceof SocketClient) {
-        roomListEl.innerHTML = '<div class="room-item">Loading...</div>';
+        roomListEl.innerHTML = '<div class="room-item">ロード中...</div>';
         const rooms = await server.listRooms();
         renderRoomList(rooms);
     }
@@ -114,15 +117,16 @@ async function refreshRoomList() {
 function renderRoomList(rooms: any[]) {
     roomListEl.innerHTML = '';
     if (rooms.length === 0) {
-        roomListEl.innerHTML = '<div class="room-item empty-message">No rooms found. Create one!</div>';
+        roomListEl.innerHTML = '<div class="room-item empty-message">ルームが見つかりません。作成してください！</div>';
         return;
     }
     rooms.forEach(room => {
         const item = document.createElement('div');
         item.className = 'room-item';
+        // ホスト名とルームIDを表示
         item.innerHTML = `
-            <span>${room.name}</span>
-            <button class="menu-btn small" data-id="${room.id}">Join</button>
+            <span>${room.hostName || '不明'} (ID: ${room.id.substring(0, 4)})</span>
+            <button class="menu-btn small" data-id="${room.id}">参加</button>
         `;
         item.querySelector('button')!.onclick = () => joinRoom(room.id);
         roomListEl.appendChild(item);
@@ -131,9 +135,12 @@ function renderRoomList(rooms: any[]) {
 
 async function createRoom() {
     if (server instanceof SocketClient) {
-        await server.createRoom(playerName);
+        btnCreateRoom.setAttribute('disabled', 'true'); // ボタンを無効化
+        waitingMessage.textContent = 'ルームを作成中...';
+        const roomId = await server.createRoom(playerName);
+        waitingMessage.textContent = `対戦相手を待っています... (ルームID: ${roomId.substring(0, 4)})`;
         waitingMessage.classList.remove('hidden');
-        // Disable controls while waiting
+        // 待機中は操作不能にする
     }
 }
 
@@ -143,11 +150,12 @@ function joinRoom(roomId: string) {
     }
 }
 
-// --- Game Logic (Refactored) ---
-async function initGame(initialState?: any) {
+// --- ゲームロジック (リファクタリング済み) ---
+async function initGame(initialState?: any, playerId: 'p1' | 'p2' = 'p1') {
   isAnimating = false;
+  myPlayerId = playerId;
   
-  // ensure overlay
+  // オーバーレイの確認
   if (!document.getElementById('battle-overlay-text')) {
     const el = document.createElement('div');
     el.id = 'battle-overlay-text';
@@ -159,16 +167,16 @@ async function initGame(initialState?: any) {
   battleResultText.textContent = '';
   battleResultText.className = 'battle-result-text'; 
   
-  p1SlotEl.innerHTML = '<div class="card-placeholder">Your Slot</div>';
-  p2SlotEl.innerHTML = '<div class="card-placeholder">Enemy Slot</div>';
+  p1SlotEl.innerHTML = '<div class="card-placeholder">あなたのスロット</div>';
+  p2SlotEl.innerHTML = '<div class="card-placeholder">相手のスロット</div>';
   p1SlotEl.classList.remove('active');
   p2SlotEl.classList.remove('active');
   
-  logContainerEl.innerHTML = ''; // Clear logs on new game
+  logContainerEl.innerHTML = ''; // 新しいゲームでログを消去
 
   let state = initialState;
   if (!state) {
-      // If no state provided, try to fetch from server (mainly for CPU mode)
+      // 状態が提供されない場合、サーバーから取得を試みる (主にCPUモード用)
       state = await server.resetGame();
   }
 
@@ -178,20 +186,29 @@ async function initGame(initialState?: any) {
 function updateDisplay(state: any) {
   turnCountEl.textContent = state.turn.toString();
   phaseTextEl.textContent = state.phase.toUpperCase();
-  p1GrailsEl.textContent = state.players.p1.grails.toString();
-  p2GrailsEl.textContent = state.players.p2.grails.toString();
 
-  // P1 Hand
+  // myPlayerIdに基づいてUIに状態をマッピング
+  // 自分の状態
+  const myState = state.players[myPlayerId];
+  // 相手の状態
+  const oppId = myPlayerId === 'p1' ? 'p2' : 'p1';
+  const oppState = state.players[oppId];
+
+  // 聖杯 (P1 UI要素 = 自分, P2 UI要素 = 相手)
+  p1GrailsEl.textContent = myState.grails.toString();
+  p2GrailsEl.textContent = oppState.grails.toString();
+
+  // 自分の手札 (下側) -> p1HandEl
   p1HandEl.innerHTML = '';
-  state.players.p1.hand.forEach((cardId: CardId) => {
+  myState.hand.forEach((cardId: CardId) => {
     const cardEl = createCardElement(cardId, true);
     cardEl.onclick = () => onCardClick(cardId, cardEl);
     p1HandEl.appendChild(cardEl);
   });
 
-  // P2 Hand
+  // 相手の手札 (上側) -> p2HandEl
   p2HandEl.innerHTML = '';
-  state.players.p2.hand.forEach(() => {
+  oppState.hand.forEach(() => {
     const cardEl = document.createElement('div');
     cardEl.className = 'card face-down';
     cardEl.textContent = '?'; 
@@ -222,12 +239,12 @@ function addLog(message: string, isImportant = false) {
   logContainerEl.insertBefore(div, logContainerEl.firstChild);
 }
 
-// --- Card Interaction ---
+// --- カード操作 ---
 async function onCardClick(cardId: CardId, cardEl: HTMLElement) {
   if (isAnimating) return;
   isAnimating = true;
 
-  // 1. Animate to Slot
+  // 1. スロットへのアニメーション (自分のスロット = p1SlotEl, 下側のスロット)
   const rect = cardEl.getBoundingClientRect();
   const slotRect = p1SlotEl.getBoundingClientRect();
   
@@ -255,13 +272,14 @@ async function onCardClick(cardId: CardId, cardEl: HTMLElement) {
   p1SlotEl.appendChild(slotCard);
   clone.remove();
 
-  // 2. Server Request
-  phaseTextEl.textContent = "WAITING...";
+  // 2. サーバーリクエスト
+  phaseTextEl.textContent = "待機中...";
   
-  const response = await server.playCard('p1', cardId);
+  // myPlayerId を使用
+  const response = await server.playCard(myPlayerId, cardId);
 
-  // 3. Opponent Animation
-  const p2CardId = response.opponentCard;
+  // 3. 相手のアニメーション (相手のスロット = p2SlotEl, 上側のスロット)
+  const oppCardId = response.opponentCard;
   p2SlotEl.innerHTML = '';
   
   const enemyHandRect = p2HandEl.getBoundingClientRect();
@@ -286,37 +304,58 @@ async function onCardClick(cardId: CardId, cardEl: HTMLElement) {
   await new Promise(r => setTimeout(r, 600));
 
   p2SlotEl.innerHTML = '';
-  const p2SlotCard = createCardElement(p2CardId, true);
+  const p2SlotCard = createCardElement(oppCardId, true);
   p2SlotEl.appendChild(p2SlotCard);
   enemyClone.remove();
 
-  // 4. Battle Start
+  // 4. バトル開始
   battleOverlayText.textContent = "BATTLE!";
   battleOverlayText.classList.add('show');
   await new Promise(r => setTimeout(r, 1000));
   battleOverlayText.classList.remove('show');
 
-  // 5. Events
+  // 5. イベント処理
   for (const event of response.events) {
     await processEvent(event);
   }
 
-  // Logs
-  const logMessages = generateBattleLog(response.battleResult, server instanceof MockServer ? server['engine'].gameState.turn : response.gameState.turn, cardId, p2CardId);
+  // ログ
+  // プレイヤー相対でログを出したい？
+  // 現在 generateBattleLog は内部ロジックを使用しています。
+  // 実際の p1/p2 カードを渡しましょう。
+  const globalP1Card = myPlayerId === 'p1' ? cardId : oppCardId;
+  const globalP2Card = myPlayerId === 'p2' ? cardId : oppCardId;
+
+  const logMessages = generateBattleLog(response.battleResult, response.gameState.turn - 1, globalP1Card, globalP2Card);
   logMessages.forEach(msg => addLog(msg));
 
-  // 6. Result
+  // 6. 結果
   const winner = response.battleResult.winner;
-  battleResultText.textContent = winner === 'draw' ? 'DRAW' : (winner === 'p1' ? 'WIN!' : 'LOSE...');
-  battleResultText.className = `battle-result-text ${winner === 'draw' ? 'draw' : (winner === 'p1' ? 'win' : 'lose')} fade-in`;
+  
+  let resultText = '';
+  let resultClass = '';
+  
+  if (winner === 'draw') {
+      resultText = 'DRAW';
+      resultClass = 'draw';
+  } else if (winner === myPlayerId) {
+      resultText = 'WIN!';
+      resultClass = 'win';
+  } else {
+      resultText = 'LOSE...';
+      resultClass = 'lose';
+  }
+
+  battleResultText.textContent = resultText;
+  battleResultText.className = `battle-result-text ${resultClass} fade-in`;
 
   await new Promise(r => setTimeout(r, 1500));
 
-  // 7. Cleanup
+  // 7. クリーンアップ
   battleResultText.classList.remove('fade-in');
   battleResultText.textContent = '';
-  p1SlotEl.innerHTML = '<div class="card-placeholder">Your Slot</div>';
-  p2SlotEl.innerHTML = '<div class="card-placeholder">Enemy Slot</div>';
+  p1SlotEl.innerHTML = '<div class="card-placeholder">あなたのスロット</div>';
+  p2SlotEl.innerHTML = '<div class="card-placeholder">相手のスロット</div>';
 
   updateDisplay(response.gameState);
   isAnimating = false;
@@ -329,19 +368,34 @@ async function onCardClick(cardId: CardId, cardEl: HTMLElement) {
 
 async function processEvent(event: BattleEvent) {
   if (event.type === 'effect_activation') {
-    addLog(`[EFFECT] ${event.message}`, true);
+    addLog(`[効果] ${event.message}`, true);
     p1SlotEl.classList.add('active');
     p2SlotEl.classList.add('active');
     await new Promise(r => setTimeout(r, 500));
     p1SlotEl.classList.remove('active');
     p2SlotEl.classList.remove('active');
   } else if (event.type === 'rule_change') {
-    addLog(`[RULE] ${event.message}`, true);
+    addLog(`[ルール] ${event.message}`, true);
     await new Promise(r => setTimeout(r, 500));
   } else if (event.type === 'grail_transfer') {
-    const targetEl = event.payload.player === 'p1' ? p1GrailsEl : p2GrailsEl;
-    const startEl = event.payload.player === 'p1' ? p2SlotEl : p1SlotEl;
-    flyGrail(startEl, targetEl);
+    // 移動の処理
+    // payload.player === myPlayerId の場合 -> 対象は p1GrailsEl (自分)
+    
+    const isMe = event.payload.player === myPlayerId;
+    const targetEl = isMe ? p1GrailsEl : p2GrailsEl;
+    
+    // アニメーションの発生源: 
+    // 自分が得るなら相手のスロット、相手が得るなら自分のスロット
+    // (奪うという演出)
+    // ただし、単純化のため、増える時は相手側から飛んでくるようにする
+    
+    // 発生源:
+    const startEl = isMe ? p2SlotEl : p1SlotEl; 
+    
+    if (event.payload.amount > 0) {
+        flyGrail(startEl, targetEl);
+    }
+    
     await new Promise(r => setTimeout(r, 800));
   }
 }
@@ -369,10 +423,16 @@ function flyGrail(fromEl: HTMLElement, toEl: HTMLElement) {
 
 function showGameOver(state: any) {
   gameOverOverlay.classList.remove('hidden');
-  const winner = state.winner === 'draw' ? '引き分け' : (state.winner === 'p1' ? 'あなたの勝利！' : 'あなたの敗北...');
-  winnerText.textContent = `${winner} (P1: ${state.players.p1.grails} - P2: ${state.players.p2.grails})`;
+  const isWin = state.winner === myPlayerId;
+  const isDraw = state.winner === 'draw';
+  
+  const winnerTextContent = isDraw ? '引き分け' : (isWin ? 'あなたの勝利！' : 'あなたの敗北...');
+  
+  const myGrails = state.players[myPlayerId].grails;
+  const enemGrails = state.players[myPlayerId === 'p1' ? 'p2' : 'p1'].grails;
+  
+  winnerText.textContent = `${winnerTextContent} (あなた: ${myGrails} - 相手: ${enemGrails})`;
 }
 
-// Start
+// 開始
 initApp();
-

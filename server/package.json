@@ -1,9 +1,10 @@
 {
   "name": "holy-grail-war-server",
   "version": "1.0.0",
+  "type": "module",
   "main": "src/index.ts",
   "scripts": {
-    "dev": "npx ts-node src/index.ts"
+    "dev": "node --loader ts-node/esm --experimental-specifier-resolution=node src/index.ts"
   },
   "dependencies": {
     "socket.io": "^4.7.2",

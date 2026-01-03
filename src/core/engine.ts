@@ -63,7 +63,7 @@ export class GameEngine {
         }
       },
       stockGrails: 100,
-      logs: [], // Deprecated? Used for text history storage if needed
+      logs: [], // 必要に応じてテキスト履歴の保存に使用
       winner: null
     };
   }
