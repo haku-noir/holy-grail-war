@@ -576,8 +576,14 @@ button:hover {
 }
 
 /* CPU Setup */
+#cpu-setup-screen h2 {
+    font-family: var(--font-title);
+    color: var(--accent-gold);
+    font-size: 3rem;
+}
+
 .setup-group {
-    margin-bottom: 2rem;
+    margin: 2rem;
     text-align: center;
 }
 
