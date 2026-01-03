@@ -11,6 +11,7 @@ interface Room {
     guestId?: string;
     guestName?: string;
     engine?: GameEngine; // 適切なEngineを使用
+    rematchRequests: Set<string>; // 再戦リクエストをしたプレイヤーID (socket.id)
 }
 
 const httpServer = createServer();
@@ -37,7 +38,8 @@ io.on('connection', (socket) => {
         rooms[roomId] = {
             id: roomId,
             hostId: socket.id,
-            hostName: playerName
+            hostName: playerName,
+            rematchRequests: new Set()
         };
         socketToRoom[socket.id] = roomId;
 
@@ -156,6 +158,49 @@ io.on('connection', (socket) => {
             }
         } else {
              console.log(`[${data.roomId}] 相手プレイヤーを待っています...`);
+        }
+    });
+
+    socket.on('request_rematch', (roomId: string) => {
+        const room = rooms[roomId];
+        if (!room) return;
+
+        room.rematchRequests.add(socket.id);
+        console.log(`[${roomId}] Player ${socket.id} requested rematch. Total: ${room.rematchRequests.size}`);
+
+        // 両プレイヤーがリクエストした場合
+        if (room.rematchRequests.size === 2 && room.guestId) {
+            console.log(`[${roomId}] Both players accepted rematch. Restarting game...`);
+            
+            // エンジンの再初期化
+            room.engine = new GameEngine();
+            room.rematchRequests.clear(); // リセット
+
+            const state = room.engine.gameState;
+            
+            // プレイヤーIDを含む開始イベントを再送信
+            io.to(roomId).emit('game_start', { 
+                roomId: roomId,
+                p1: room.hostId,
+                p2: room.guestId,
+                gameState: state
+            });
+        }
+    });
+
+    socket.on('leave_room', (roomId: string) => {
+        const room = rooms[roomId];
+        if (room) {
+            console.log(`[${roomId}] Player ${socket.id} left the room.`);
+            // 相手に通知
+            socket.to(roomId).emit('opponent_left');
+            
+            // 明示的な退出なので、ルームを閉じる
+             io.to(roomId).emit('room_closed', 'プレイヤーが退出しました');
+             
+             if (room.guestId && socketToRoom[room.guestId]) delete socketToRoom[room.guestId];
+             if (socketToRoom[room.hostId]) delete socketToRoom[room.hostId];
+             delete rooms[roomId];
         }
     });
 

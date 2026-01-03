@@ -48,4 +48,13 @@ export class MockServer implements ServerAPI {
     this.engine = new GameEngine();
     return this.engine.gameState;
   }
+
+  async requestRematch(): Promise<void> {
+      // モックでは何もしない
+      return;
+  }
+  
+  leaveRoom(): void {
+      // モックでは何もしない
+  }
 }

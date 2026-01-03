@@ -58,6 +58,10 @@ export class SocketClient implements ServerAPI {
       });
   }
 
+  onOpponentLeft(callback: () => void) {
+      this.socket.on('opponent_left', callback);
+  }
+
   // ゲームAPI
   async playCard(playerId: 'p1' | 'p2', cardId: CardId): Promise<TurnResponse> {
     if (!this.currentRoomId) throw new Error("ルームに入っていません");
@@ -75,9 +79,22 @@ export class SocketClient implements ServerAPI {
   async resetGame(): Promise<GameState> {
     // オンラインゲームのリセットは基本的にサーバーイベントで処理されますが、インターフェースの一貫性のために:
     return new Promise((resolve) => {
-         // TODO: 再戦ロジックの実装
+         this.requestRematch();
          resolve({} as GameState); // プレースホルダー
     });
+  }
+
+  async requestRematch(): Promise<void> {
+      if (this.currentRoomId) {
+          this.socket.emit('request_rematch', this.currentRoomId);
+      }
+  }
+
+  leaveRoom(): void {
+      if (this.currentRoomId) {
+          this.socket.emit('leave_room', this.currentRoomId);
+          this.currentRoomId = null;
+      }
   }
 
   getMyPlayerId(p1SocketId: string, p2SocketId: string): 'p1' | 'p2' {

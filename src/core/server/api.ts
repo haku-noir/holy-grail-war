@@ -18,6 +18,12 @@ export interface ServerAPI {
   // カードをプレイし、ターン解決まで行う
   playCard(playerId: 'p1' | 'p2', cardId: CardId): Promise<TurnResponse>;
 
-  // ゲームリセット
+  // ゲームリセット (再戦リクエスト)
   resetGame(): Promise<GameState>;
+
+  // 再戦リクエスト（より明示的なメソッド）
+  requestRematch(): Promise<void>;
+
+  // 退出
+  leaveRoom(): void;
 }

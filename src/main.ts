@@ -10,6 +10,7 @@ let server: ServerAPI;
 let isAnimating = false;
 let playerName = "Player";
 let myPlayerId: 'p1' | 'p2' = 'p1'; // デフォルトはp1 (CPUモード)
+let isLeaving = false;
 
 // --- 画面 ---
 const screens = {
@@ -63,15 +64,86 @@ function initApp() {
   btnBackTitle.onclick = () => showScreen('title');
   
   restartBtn.onclick = () => {
-    // オンラインの場合、再戦リクエストが必要かもしれません
-    server.resetGame().then(() => initGame(undefined, myPlayerId));
+    // オンラインの場合、再戦リクエスト
+    if (server instanceof SocketClient) {
+        restartBtn.setAttribute('disabled', 'true');
+        restartBtn.textContent = '相手の応答を待っています... (30)';
+        
+        server.requestRematch();
+        
+        // 30秒カウントダウン開始
+        const endTime = Date.now() + 30000;
+        const interval = setInterval(() => {
+            const remaining = Math.ceil((endTime - Date.now()) / 1000);
+            if (remaining <= 0) {
+                clearInterval(interval);
+                 if (!restartBtn.disabled) return; // すでに開始済みの場合
+
+                // タイムアウト
+                alert("相手からの応答がありませんでした。タイトルに戻ります。");
+                server.leaveRoom();
+                showScreen('title');
+            } else {
+                restartBtn.textContent = `相手の応答を待っています... (${remaining})`;
+            }
+        }, 1000);
+
+        // ゲーム開始時にインターバルをクリアするために、onGameStart内で処理が必要
+        // 簡易的に restartBtn.dataset にIDを保存して管理
+        restartBtn.dataset.intervalId = interval.toString();
+
+    } else {
+        // CPU戦は即座にリセット
+        server.resetGame().then(() => initGame(undefined, myPlayerId));
+    }
   };
   
   returnTitleBtn.onclick = () => {
-      // 必要に応じて切断処理
-      // TODO: 適切な切断ロジック。今のところはタイトルをリロードするだけ。
+      isLeaving = true;
+      
+      // インターバル停止
+      if (restartBtn.dataset.intervalId) {
+         clearInterval(Number(restartBtn.dataset.intervalId));
+         restartBtn.dataset.intervalId = '';
+      }
+      
+      if (server instanceof SocketClient) {
+          server.leaveRoom();
+      }
       showScreen('title');
   };
+}
+
+// Global listener helper
+function setupSocketListeners(client: SocketClient) {
+    client.onGameStart((data) => {
+         console.log("ゲーム開始!", data);
+         waitingMessage.classList.add('hidden');
+         
+         // リセットボタンの状態をクリア
+         if (restartBtn.dataset.intervalId) {
+             clearInterval(Number(restartBtn.dataset.intervalId));
+             restartBtn.dataset.intervalId = '';
+         }
+         restartBtn.removeAttribute('disabled');
+         restartBtn.textContent = 'もう一度勝負する';
+         
+         // 自分のIDを決定
+         // data: { roomId, p1: socketId, p2: socketId, gameState }
+         myPlayerId = client.getMyPlayerId(data.p1, data.p2);
+         console.log(`私は ${myPlayerId} です`);
+
+         initGame(data.gameState, myPlayerId); 
+         showScreen('game');
+    });
+
+    client.onOpponentLeft(() => {
+        if (isLeaving) return; // 自分が退出した場合は無視
+        alert("対戦相手が退出しました。タイトルに戻ります。");
+        showScreen('title');
+        // 必要なら自分も退出処理
+        client.leaveRoom(); 
+    });
 }
 
 async function startCpuBattle() {
@@ -87,20 +159,8 @@ async function showLobby() {
   // 必要に応じてSocket Clientを初期化
   if (!(server instanceof SocketClient)) {
      server = new SocketClient();
-     // グローバルリスナーの設定があればここで行う
-     (server as SocketClient).onGameStart((data) => {
-         console.log("ゲーム開始!", data);
-         waitingMessage.classList.add('hidden');
-         
-         // 自分のIDを決定
-         const client = server as SocketClient;
-         // data: { roomId, p1: socketId, p2: socketId, gameState }
-         myPlayerId = client.getMyPlayerId(data.p1, data.p2);
-         console.log(`私は ${myPlayerId} です`);
-
-         initGame(data.gameState, myPlayerId); 
-         showScreen('game');
-     });
+     // グローバルリスナーの設定
+     setupSocketListeners(server as SocketClient);
   }
   showScreen('lobby');
   refreshRoomList();
@@ -153,7 +213,16 @@ function joinRoom(roomId: string) {
 // --- ゲームロジック (リファクタリング済み) ---
 async function initGame(initialState?: any, playerId: 'p1' | 'p2' = 'p1') {
   isAnimating = false;
+  isLeaving = false; 
   myPlayerId = playerId;
+  
+  // リセットボタンの初期化
+  restartBtn.removeAttribute('disabled');
+  restartBtn.textContent = 'もう一度勝負する';
+  if (restartBtn.dataset.intervalId) {
+      clearInterval(Number(restartBtn.dataset.intervalId));
+      restartBtn.dataset.intervalId = '';
+  }
   
   // オーバーレイの確認
   if (!document.getElementById('battle-overlay-text')) {
