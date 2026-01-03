@@ -167,6 +167,10 @@ body {
   font-size: 0.9rem;
 }
 
+.room-item:last-child {
+  border-bottom: none;
+}
+
 #waiting-message {
   font-size: 1.5rem;
   color: var(--text-secondary);
@@ -569,4 +573,68 @@ button:hover {
 
 .checkbox-container.small {
   font-size: 0.9rem;
+}
+
+/* CPU Setup */
+.setup-group {
+    margin-bottom: 2rem;
+    text-align: center;
+}
+
+.level-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.level-btn {
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid var(--primary-gold);
+    color: var(--text-primary);
+    padding: 1rem;
+    width: 120px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.level-btn.selected {
+    background: var(--accent-gold);
+    color: var(--bg-color);
+    box-shadow: 0 0 15px var(--accent-gold);
+}
+
+.lvl-num {
+    font-size: 1.5rem;
+    font-weight: bold;
+    font-family: 'Cinzel', serif;
+}
+
+.lvl-name {
+    font-size: 0.9rem;
+    margin-top: 0.5rem;
+}
+
+#level-desc {
+    font-style: italic;
+    color: var(--text-secondary);
+    min-height: 1.5em;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.3); 
+}
+::-webkit-scrollbar-thumb {
+    background: #888; 
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #555; 
 }

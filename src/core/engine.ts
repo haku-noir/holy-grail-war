@@ -30,8 +30,13 @@ const DEFAULT_EFFECT: CardEffect = {
 export class GameEngine {
   gameState: GameState;
 
-  constructor() {
-    this.gameState = this.createInitialState();
+  constructor(state?: GameState) {
+    if (state) {
+      // 状態のディープコピーを作成して、元のオブジェクトに影響を与えないようにする
+      this.gameState = JSON.parse(JSON.stringify(state));
+    } else {
+      this.gameState = this.createInitialState();
+    }
   }
 
   createInitialState(): GameState {

@@ -1,14 +1,16 @@
 import type { ServerAPI, TurnResponse } from './api';
 import { GameEngine } from '../engine';
 import { CPU } from '../cpu';
-import type { CardId, GameState } from '../types';
+import type { CardId, GameState, CpuLevel } from '../types';
 
 export class MockServer implements ServerAPI {
   private engine: GameEngine;
   private latencyMs: number = 800; // ネットワーク遅延・思考時間のシミュレーション
+  private cpuLevel: CpuLevel;
 
-  constructor() {
+  constructor(cpuLevel: CpuLevel = 1) {
     this.engine = new GameEngine();
+    this.cpuLevel = cpuLevel;
   }
 
   async playCard(playerId: 'p1' | 'p2', cardId: CardId): Promise<TurnResponse> {
@@ -21,7 +23,7 @@ export class MockServer implements ServerAPI {
     // 3. CPU（プレイヤー2）のプレイ
     // CPUは現在のゲーム状態を元に決定します
     // 注: CPUロジックが 'selection' フェーズに依存している場合、調整が必要になる可能性があります
-    const cpuCard = CPU.selectCard(this.engine.gameState, 'p2');
+    const cpuCard = CPU.selectCard(this.engine.gameState, 'p2', this.cpuLevel);
     this.engine.playCard('p2', cpuCard);
 
     // 4. ターンの解決

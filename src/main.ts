@@ -18,6 +18,7 @@ let isHandOpenLocal = true; // CPU戦用の設定
 const screens = {
   title: document.getElementById('title-screen')!,
   lobby: document.getElementById('lobby-screen')!,
+  cpuSetup: document.getElementById('cpu-setup-screen')!,
   game: document.getElementById('game-screen')!
 };
 
@@ -39,7 +40,7 @@ const battleResultText = document.getElementById('battle-result-text')!;
 
 // --- DOM要素 (メニュー) ---
 const nameInput = document.getElementById('player-name-input') as HTMLInputElement;
-const btnCpuBattle = document.getElementById('btn-cpu-battle')!;
+const btnToCpuSetup = document.getElementById('btn-to-cpu-setup')!;
 const btnOnlineBattle = document.getElementById('btn-online-battle')!;
 const btnCreateRoom = document.getElementById('btn-create-room')!;
 const btnRefreshRooms = document.getElementById('btn-refresh-rooms')!;
@@ -48,6 +49,15 @@ const roomListEl = document.getElementById('room-list')!;
 const waitingMessage = document.getElementById('waiting-message')!;
 const chkHandOpenCpu = document.getElementById('chk-hand-open-cpu') as HTMLInputElement;
 const chkHandOpenOnline = document.getElementById('chk-hand-open-online') as HTMLInputElement;
+
+// --- DOM要素 (CPU設定) ---
+const btnStartCpuBattle = document.getElementById('btn-start-cpu-battle')!;
+const btnBackFromCpu = document.getElementById('btn-back-from-cpu')!;
+const levelBtns = document.querySelectorAll('.level-btn');
+const levelDesc = document.getElementById('level-desc')!;
+
+// --- 設定 ---
+let selectedCpuLevel: any = 1; // 1 | 2 | 3 (Type to be imported)
 
 // --- 効果用オーバーレイ ---
 let battleOverlayText: HTMLElement;
@@ -91,12 +101,31 @@ function initApp() {
   });
 
   // イベントリスナー
-  btnCpuBattle.onclick = startCpuBattle;
+  btnToCpuSetup.onclick = () => showScreen('cpuSetup');
+  btnStartCpuBattle.onclick = startCpuBattle;
+  btnBackFromCpu.onclick = () => showScreen('title');
+
   btnOnlineBattle.onclick = showLobby;
   btnCreateRoom.onclick = createRoom;
   btnRefreshRooms.onclick = refreshRoomList;
   btnBackTitle.onclick = () => showScreen('title');
   
+  // CPUレベル選択
+  levelBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+          levelBtns.forEach(b => b.classList.remove('selected'));
+          btn.classList.add('selected');
+          selectedCpuLevel = Number((btn as HTMLElement).dataset.level);
+          
+          // 説明更新
+          let desc = "";
+          if (selectedCpuLevel === 1) desc = "Level 1: 完全ランダムに行動します。";
+          else if (selectedCpuLevel === 2) desc = "Level 2: その時点で最も勝率の高いカードを選択します。";
+          else if (selectedCpuLevel === 3) desc = "Level 3: ゲーム終了までを読み切り、最善手を打ちます。";
+          levelDesc.textContent = desc;
+      });
+  });
+
   restartBtn.onclick = () => {
     // オンラインの場合、再戦リクエスト
     if (server instanceof SocketClient) {
@@ -211,7 +240,9 @@ function updateTooltipPosition(x: number, y: number) {
 async function startCpuBattle() {
   playerName = nameInput.value || "Player";
   isHandOpenLocal = chkHandOpenCpu.checked; // 設定を反映
-  server = new MockServer();
+  // MockServer creation will be updated to accept level
+  // @ts-ignore
+  server = new MockServer(selectedCpuLevel);
   myPlayerId = 'p1'; // CPU戦は常にP1
   await initGame(undefined, 'p1');
   showScreen('game');
