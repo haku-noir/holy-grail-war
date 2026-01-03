@@ -11,6 +11,7 @@ let isAnimating = false;
 let playerName = "Player";
 let myPlayerId: 'p1' | 'p2' = 'p1'; // デフォルトはp1 (CPUモード)
 let isLeaving = false;
+let currentGameState: any = null;
 
 // --- 画面 ---
 const screens = {
@@ -54,8 +55,38 @@ function showScreen(screenName: keyof typeof screens) {
   screens[screenName].classList.remove('hidden');
 }
 
+// --- ツールチップ要素 ---
+let tooltipEl: HTMLElement;
+
 // --- 初期化 ---
 function initApp() {
+  // ツールチップ作成
+  tooltipEl = document.createElement('div');
+  tooltipEl.className = 'card-preview-tooltip hidden';
+  document.body.appendChild(tooltipEl);
+
+  // ログコンテナでのイベントデリゲーション (ツールチップ用)
+  logContainerEl.addEventListener('mouseover', (e) => {
+    const target = e.target as HTMLElement;
+    if (target.classList.contains('log-card-name')) {
+      const cardId = Number(target.dataset.cardId) as CardId;
+      showTooltip(cardId, e.clientX, e.clientY);
+    }
+  });
+
+  logContainerEl.addEventListener('mouseout', (e) => {
+    const target = e.target as HTMLElement;
+    if (target.classList.contains('log-card-name')) {
+      hideTooltip();
+    }
+  });
+
+  logContainerEl.addEventListener('mousemove', (e) => {
+     if (!tooltipEl.classList.contains('hidden')) {
+        updateTooltipPosition(e.clientX, e.clientY);
+     }
+  });
+
   // イベントリスナー
   btnCpuBattle.onclick = startCpuBattle;
   btnOnlineBattle.onclick = showLobby;
@@ -144,6 +175,34 @@ function setupSocketListeners(client: SocketClient) {
         // 必要なら自分も退出処理
         client.leaveRoom(); 
     });
+}
+
+function showTooltip(cardId: CardId, x: number, y: number) {
+  const card = CARDS[cardId];
+  // 簡易カード表示
+  tooltipEl.innerHTML = `
+    <div class="card face-up" style="transform: scale(1); margin: 0;">
+      <div class="card-rank">${card.basePower}</div>
+      <div class="card-name">${card.name}</div>
+      <div class="card-desc">${card.description}</div>
+    </div>
+  `;
+  tooltipEl.classList.remove('hidden');
+  updateTooltipPosition(x, y);
+}
+
+function hideTooltip() {
+  tooltipEl.classList.add('hidden');
+}
+
+function updateTooltipPosition(x: number, y: number) {
+  // 右下に表示するようにオフセット
+  const offsetX = 15;
+  const offsetY = 15;
+  
+  // 画面はみ出し防止ロジックを入れると良きだが、まずは簡易実装
+  tooltipEl.style.left = `${x + offsetX}px`;
+  tooltipEl.style.top = `${y + offsetY}px`;
 }
 
 async function startCpuBattle() {
@@ -252,7 +311,30 @@ async function initGame(initialState?: any, playerId: 'p1' | 'p2' = 'p1') {
   updateDisplay(state); 
 }
 
+// --- ヘルパー: 表示用パワー計算 ---
+function getDisplayPower(cardId: CardId, state: any, ownerId: 'p1' | 'p2'): number {
+  if (!state) return CARDS[cardId].basePower;
+
+  // サーバーからのレスポンスで型が文字列になっている可能性を考慮して緩い比較を使用、またはキャスト
+  const cId = Number(cardId);
+  const turn = Number(state.turn);
+
+  if (cId === 5) { // ガウェイン
+    // 3ターン目は15
+    if (turn === 3) return 15;
+  }
+  if (cId === 8) { // パロミデス
+    // 聖杯が相手より少ない場合 13
+    const myGrails = Number(state.players[ownerId].grails);
+    const oppId = ownerId === 'p1' ? 'p2' : 'p1';
+    const oppGrails = Number(state.players[oppId].grails);
+    if (myGrails < oppGrails) return 13;
+  }
+  return CARDS[cardId].basePower;
+}
+
 function updateDisplay(state: any) {
+  currentGameState = state;
   turnCountEl.textContent = state.turn.toString();
   phaseTextEl.textContent = state.phase.toUpperCase();
 
@@ -269,8 +351,17 @@ function updateDisplay(state: any) {
 
   // 自分の手札 (下側) -> p1HandEl
   p1HandEl.innerHTML = '';
+  // 現在のバフ値を取得（本来は「次のターン」用変数だが、解決フェーズ前なのでこのターン適用分）
+  const currentBuff = myState.nextTurnBuff || 0;
+
   myState.hand.forEach((cardId: CardId) => {
-    const cardEl = createCardElement(cardId, true);
+    // 状況によるバフ計算
+    const displayPower = getDisplayPower(cardId, state, myPlayerId);
+    const condBuff = displayPower - CARDS[cardId].basePower;
+    const totalBuff = condBuff + currentBuff;
+
+    // バフを渡す
+    const cardEl = createCardElement(cardId, true, totalBuff);
     cardEl.onclick = () => onCardClick(cardId, cardEl);
     p1HandEl.appendChild(cardEl);
   });
@@ -285,14 +376,29 @@ function updateDisplay(state: any) {
   });
 }
 
-function createCardElement(cardId: CardId, faceUp: boolean): HTMLElement {
+function createCardElement(cardId: CardId, faceUp: boolean, buff: number = 0): HTMLElement {
   const cardData = CARDS[cardId];
   const el = document.createElement('div');
   el.className = `card ${faceUp ? 'face-up' : 'face-down'}`;
 
   if (faceUp) {
+    const finalPower = cardData.basePower + buff;
+    let rankHtml = `<div class="card-rank">${cardData.basePower}</div>`;
+    
+    // バフがある場合の表示変更
+    if (buff !== 0) {
+        const color = buff > 0 ? '#4caf50' : '#ff5252'; // 緑 or 赤
+        // レイアウト調整: メイン数値を大きく、元の数値を小さく
+        rankHtml = `
+            <div class="card-rank" style="color: ${color}; display: flex; align-items: baseline; justify-content: center; gap: 4px;">
+                ${finalPower}
+                <span style="font-size: 0.6em; color: var(--text-secondary); font-weight: normal;">(${cardData.basePower})</span>
+            </div>
+        `;
+    }
+
     el.innerHTML = `
-      <div class="card-rank">${cardData.basePower}</div>
+      ${rankHtml}
       <div class="card-name">${cardData.name}</div>
       <div class="card-desc">${cardData.description}</div>
     `;
@@ -304,7 +410,8 @@ function addLog(message: string, isImportant = false) {
   const div = document.createElement('div');
   div.className = 'log-entry';
   if (isImportant) div.style.color = 'var(--accent-gold)';
-  div.textContent = message;
+  // innerHTMLに変更してリッチテキスト（カード名色付けなど）を許可
+  div.innerHTML = message;
   logContainerEl.insertBefore(div, logContainerEl.firstChild);
 }
 
@@ -312,6 +419,23 @@ function addLog(message: string, isImportant = false) {
 async function onCardClick(cardId: CardId, cardEl: HTMLElement) {
   if (isAnimating) return;
   isAnimating = true;
+
+  // バフ値の事前取得 (サーバーリクエストでstateが更新される前に確保)
+  const myStateBuff = currentGameState?.players[myPlayerId]?.nextTurnBuff || 0;
+  const oppId = myPlayerId === 'p1' ? 'p2' : 'p1';
+  const oppStateBuff = currentGameState?.players[oppId]?.nextTurnBuff || 0;
+
+  console.log('Buff Debug:', { 
+    turn: currentGameState?.turn,
+    myPlayerId, 
+    myStateBuff, 
+    oppStateBuff
+  });
+
+  // 自分のカードの表示用パワー計算
+  const myDisplayPower = getDisplayPower(cardId, currentGameState, myPlayerId);
+  const myCondBuff = myDisplayPower - CARDS[cardId].basePower;
+  const myTotalBuff = myCondBuff + myStateBuff;
 
   // 1. スロットへのアニメーション (自分のスロット = p1SlotEl, 下側のスロット)
   const rect = cardEl.getBoundingClientRect();
@@ -337,7 +461,8 @@ async function onCardClick(cardId: CardId, cardEl: HTMLElement) {
   await new Promise(r => setTimeout(r, 500));
 
   p1SlotEl.innerHTML = '';
-  const slotCard = createCardElement(cardId, true);
+  // スロットのカードにバフを適用
+  const slotCard = createCardElement(cardId, true, myTotalBuff);
   p1SlotEl.appendChild(slotCard);
   clone.remove();
 
@@ -351,6 +476,11 @@ async function onCardClick(cardId: CardId, cardEl: HTMLElement) {
   const oppCardId = response.opponentCard;
   p2SlotEl.innerHTML = '';
   
+  // 相手のカードの表示用パワー計算 (カードIDが判明したのでここで計算可能)
+  const oppDisplayPower = getDisplayPower(oppCardId, currentGameState, oppId);
+  const oppCondBuff = oppDisplayPower - CARDS[oppCardId].basePower;
+  const oppTotalBuff = oppCondBuff + oppStateBuff;
+
   const enemyHandRect = p2HandEl.getBoundingClientRect();
   const enemySlotRect = p2SlotEl.getBoundingClientRect();
 
@@ -373,7 +503,8 @@ async function onCardClick(cardId: CardId, cardEl: HTMLElement) {
   await new Promise(r => setTimeout(r, 600));
 
   p2SlotEl.innerHTML = '';
-  const p2SlotCard = createCardElement(oppCardId, true);
+  const p2SlotCard = createCardElement(oppCardId, true, oppTotalBuff);
+  p2SlotCard.classList.add('face-up');
   p2SlotEl.appendChild(p2SlotCard);
   enemyClone.remove();
 
@@ -466,6 +597,14 @@ async function processEvent(event: BattleEvent) {
     }
     
     await new Promise(r => setTimeout(r, 800));
+  } else if (event.type === 'buff_gain') {
+    // バフイベント
+    const pid = event.payload.player;
+    const amount = event.payload.amount;
+    const playerName = pid === myPlayerId ? 'あなた' : '相手';
+    const sign = amount > 0 ? '+' : '';
+    addLog(`[効果] ${playerName}: 次のターン数値 ${sign}${amount}`);
+    await new Promise(r => setTimeout(r, 500));
   }
 }
 

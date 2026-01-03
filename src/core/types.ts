@@ -34,6 +34,7 @@ export type BattleEventType =
   | 'effect_activation' 
   | 'rule_change' 
   | 'grail_transfer'
+  | 'buff_gain'
   | 'turn_start'
   | 'battle_start'
   | 'battle_end';

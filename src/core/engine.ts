@@ -227,6 +227,20 @@ export class GameEngine {
     p1Effect.onTurnEnd(ctxP1, battleResult);
     p2Effect.onTurnEnd(ctxP2, battleResult);
 
+    // 次ターンのバフをチェックしてイベント発行
+    if (this.gameState.players.p1.nextTurnBuff !== 0) {
+      events.push({ 
+        type: 'buff_gain', 
+        payload: { player: 'p1', amount: this.gameState.players.p1.nextTurnBuff } 
+      });
+    }
+    if (this.gameState.players.p2.nextTurnBuff !== 0) {
+      events.push({ 
+        type: 'buff_gain', 
+        payload: { player: 'p2', amount: this.gameState.players.p2.nextTurnBuff } 
+      });
+    }
+
     // 勝利カード記録
     if (winner === 'p1') this.gameState.players.p1.wonCards.push(p2CardId);
     if (winner === 'p2') this.gameState.players.p2.wonCards.push(p1CardId);

@@ -203,6 +203,10 @@ body {
   gap: 1.5rem;
   box-shadow: 5px 0 15px rgba(0,0,0,0.5);
   z-index: 10;
+  width: 300px; /* 固定幅 */
+  flex-shrink: 0; /* 縮小しない */
+  height: 100%;
+  overflow: hidden; /* パネル自体はスクロールしない */
 }
 
 .game-title {
@@ -223,6 +227,7 @@ body {
   font-weight: bold;
 }
 
+
 .log-container {
   flex-grow: 1;
   background: rgba(0, 0, 0, 0.3);
@@ -231,10 +236,33 @@ body {
   overflow-y: auto;
   font-size: 0.9rem;
   border: 1px solid rgba(255, 255, 255, 0.05);
-  display: flex; /* Flex to show columns? No, logs are lines */
+  display: flex;
   flex-direction: column; 
   gap: 0.5rem;
+  min-height: 0; /* Flexboxの子要素でスクロールさせるために重要 */
 }
+
+/* カードプレビューツールチップ */
+.card-preview-tooltip {
+  position: absolute;
+  z-index: 1000;
+  pointer-events: none;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+  transform: scale(0.8); /* 少し小さく表示 */
+  transform-origin: top left;
+}
+
+.log-card-name {
+  color: var(--accent-blue);
+  cursor: help;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+}
+
+.log-card-name:hover {
+  filter: brightness(1.2);
+}
+
 
 .log-entry {
   color: var(--text-secondary);
@@ -301,6 +329,8 @@ body {
   gap: 1rem;
   min-height: 150px; /* Height of card */
   perspective: 1000px;
+  min-width: 640px; /* Reserve space for 5 cards to prevent shrinking */
+  width: 100%; /* Use full available width */
 }
 
 /* バトルエリア */
