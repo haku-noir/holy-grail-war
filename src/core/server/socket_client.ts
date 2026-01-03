@@ -28,9 +28,9 @@ export class SocketClient implements ServerAPI {
   }
 
   // ルーム管理メソッド
-  async createRoom(playerName: string): Promise<string> {
+  async createRoom(playerName: string, isHandOpen: boolean): Promise<string> {
     return new Promise((resolve) => {
-      this.socket.emit('create_room', playerName);
+      this.socket.emit('create_room', playerName, isHandOpen);
       this.socket.once('room_created', (roomId: string) => {
         this.currentRoomId = roomId;
         resolve(roomId);

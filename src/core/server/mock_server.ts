@@ -57,4 +57,13 @@ export class MockServer implements ServerAPI {
   leaveRoom(): void {
       // モックでは何もしない
   }
+
+  async createRoom(playerName: string, isHandOpen: boolean): Promise<string> {
+      // Mockでは何もしないがインターフェースに合わせる
+      return "mock-room-id";
+  }
+
+  async joinRoom(roomId: string, playerName: string): Promise<void> {
+      // Mockでは何もしない
+  }
 }

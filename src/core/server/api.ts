@@ -19,10 +19,14 @@ export interface ServerAPI {
   playCard(playerId: 'p1' | 'p2', cardId: CardId): Promise<TurnResponse>;
 
   // ゲームリセット (再戦リクエスト)
+  // ゲームリセット (再戦リクエスト)
   resetGame(): Promise<GameState>;
 
   // 再戦リクエスト（より明示的なメソッド）
   requestRematch(): Promise<void>;
+
+  createRoom(playerName: string, isHandOpen: boolean): Promise<string>; // Room ID
+  joinRoom(roomId: string, playerName: string): Promise<void>;
 
   // 退出
   leaveRoom(): void;

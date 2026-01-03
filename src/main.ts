@@ -12,6 +12,7 @@ let playerName = "Player";
 let myPlayerId: 'p1' | 'p2' = 'p1'; // デフォルトはp1 (CPUモード)
 let isLeaving = false;
 let currentGameState: any = null;
+let isHandOpenLocal = true; // CPU戦用の設定
 
 // --- 画面 ---
 const screens = {
@@ -45,6 +46,8 @@ const btnRefreshRooms = document.getElementById('btn-refresh-rooms')!;
 const btnBackTitle = document.getElementById('btn-back-title')!;
 const roomListEl = document.getElementById('room-list')!;
 const waitingMessage = document.getElementById('waiting-message')!;
+const chkHandOpenCpu = document.getElementById('chk-hand-open-cpu') as HTMLInputElement;
+const chkHandOpenOnline = document.getElementById('chk-hand-open-online') as HTMLInputElement;
 
 // --- 効果用オーバーレイ ---
 let battleOverlayText: HTMLElement;
@@ -207,6 +210,7 @@ function updateTooltipPosition(x: number, y: number) {
 
 async function startCpuBattle() {
   playerName = nameInput.value || "Player";
+  isHandOpenLocal = chkHandOpenCpu.checked; // 設定を反映
   server = new MockServer();
   myPlayerId = 'p1'; // CPU戦は常にP1
   await initGame(undefined, 'p1');
@@ -243,8 +247,9 @@ function renderRoomList(rooms: any[]) {
         const item = document.createElement('div');
         item.className = 'room-item';
         // ホスト名とルームIDを表示
+        const status = room.isHandOpen ? '<span style="color:var(--accent-gold)">[Open]</span>' : '<span style="color:var(--text-secondary)">[Blind]</span>';
         item.innerHTML = `
-            <span>${room.hostName || '不明'} (ID: ${room.id.substring(0, 4)})</span>
+            <span>${room.hostName || '不明'} (ID: ${room.id.substring(0, 4)}) ${status}</span>
             <button class="menu-btn small" data-id="${room.id}">参加</button>
         `;
         item.querySelector('button')!.onclick = () => joinRoom(room.id);
@@ -256,7 +261,8 @@ async function createRoom() {
     if (server instanceof SocketClient) {
         btnCreateRoom.setAttribute('disabled', 'true'); // ボタンを無効化
         waitingMessage.textContent = 'ルームを作成中...';
-        const roomId = await server.createRoom(playerName);
+        const isHandOpen = chkHandOpenOnline.checked;
+        const roomId = await server.createRoom(playerName, isHandOpen);
         waitingMessage.textContent = `対戦相手を待っています... (ルームID: ${roomId.substring(0, 4)})`;
         waitingMessage.classList.remove('hidden');
         // 待機中は操作不能にする
@@ -368,11 +374,37 @@ function updateDisplay(state: any) {
 
   // 相手の手札 (上側) -> p2HandEl
   p2HandEl.innerHTML = '';
-  oppState.hand.forEach(() => {
-    const cardEl = document.createElement('div');
-    cardEl.className = 'card face-down';
-    cardEl.textContent = '?'; 
-    p2HandEl.appendChild(cardEl);
+  
+  // 公開設定チェック
+  // SocketClient(オンライン)ならstate.configを参照、そうでなければローカル設定
+  let shouldShowHand = true; // デフォルト
+  if (server instanceof SocketClient) {
+      // サーバーからのGameStateにconfigが含まれている場合
+      shouldShowHand = state.config?.isHandOpen ?? true;
+  } else {
+      shouldShowHand = isHandOpenLocal;
+  }
+
+  oppState.hand.forEach((cardId: CardId) => {
+    if (shouldShowHand) {
+        // 公開モード
+        const displayPower = getDisplayPower(cardId, state, oppId);
+        const condBuff = displayPower - CARDS[cardId].basePower;
+        const totalBuff = condBuff + (oppState.nextTurnBuff || 0);
+
+        // バフ表示付きで描画 (操作不可)
+        const cardEl = createCardElement(cardId, true, totalBuff);
+        // クリック無効化 (念のためスタイルも調整可)
+        cardEl.style.cursor = 'default';
+        cardEl.dataset.cardId = cardId.toString(); // アニメーション用にIDを付与
+        p2HandEl.appendChild(cardEl);
+    } else {
+        // 非公開モード
+        const cardEl = document.createElement('div');
+        cardEl.className = 'card face-down';
+        cardEl.textContent = '?'; 
+        p2HandEl.appendChild(cardEl);
+    }
   });
 }
 
@@ -476,28 +508,81 @@ async function onCardClick(cardId: CardId, cardEl: HTMLElement) {
   const oppCardId = response.opponentCard;
   p2SlotEl.innerHTML = '';
   
-  // 相手のカードの表示用パワー計算 (カードIDが判明したのでここで計算可能)
+  // 相手のカードの表示用パワー計算
   const oppDisplayPower = getDisplayPower(oppCardId, currentGameState, oppId);
   const oppCondBuff = oppDisplayPower - CARDS[oppCardId].basePower;
   const oppTotalBuff = oppCondBuff + oppStateBuff;
 
-  const enemyHandRect = p2HandEl.getBoundingClientRect();
   const enemySlotRect = p2SlotEl.getBoundingClientRect();
 
-  const enemyClone = document.createElement('div');
-  enemyClone.className = 'card face-down animating-card';
-  enemyClone.textContent = '?';
-  enemyClone.style.left = `${enemyHandRect.left + enemyHandRect.width / 2 - 50}px`; 
-  enemyClone.style.top = `${enemyHandRect.top}px`;
-  enemyClone.style.width = '110px';
-  enemyClone.style.height = '170px';
-  document.body.appendChild(enemyClone);
+  // 公開設定チェック
+  let isOpponentHandOpen = true;
+  if (server instanceof SocketClient) {
+      isOpponentHandOpen = currentGameState.config?.isHandOpen ?? true;
+  } else {
+      isOpponentHandOpen = isHandOpenLocal;
+  }
 
-  const etx = enemySlotRect.left - parseFloat(enemyClone.style.left);
-  const ety = enemySlotRect.top - parseFloat(enemyClone.style.top);
+  let enemyClone: HTMLElement;
+
+  if (isOpponentHandOpen) {
+       // 公開モード: 手札にある該当カードを探してアニメーション
+       const sourceCardEl = p2HandEl.querySelector(`[data-card-id="${oppCardId}"]`) as HTMLElement;
+       
+       if (sourceCardEl) {
+           const rect = sourceCardEl.getBoundingClientRect();
+           enemyClone = sourceCardEl.cloneNode(true) as HTMLElement;
+           
+           // 位置合わせ
+           enemyClone.style.position = 'fixed';
+           enemyClone.style.left = `${rect.left}px`;
+           enemyClone.style.top = `${rect.top}px`;
+           enemyClone.style.width = `${rect.width}px`;
+           enemyClone.style.height = `${rect.height}px`;
+           enemyClone.style.margin = '0';
+           enemyClone.classList.add('animating-card');
+           document.body.appendChild(enemyClone);
+           
+           // 元のカードを隠す
+           sourceCardEl.style.opacity = '0';
+       } else {
+           // フォールバック: 万が一見つからない場合は以前のロジック
+           // (例えば初期状態などで同期ずれがある場合など)
+           console.warn("Opponent card element not found for animation fallback.");
+           const enemyHandRect = p2HandEl.getBoundingClientRect();
+           enemyClone = createCardElement(oppCardId, true, oppTotalBuff);
+           enemyClone.style.position = 'fixed'; // createCardElementはstyle返さないのでここで
+           enemyClone.classList.add('animating-card'); // fixedはcssで管理されているが念のため
+           // 簡易的に手札エリア中央から
+           enemyClone.style.left = `${enemyHandRect.left + enemyHandRect.width / 2 - 50}px`;
+           enemyClone.style.top = `${enemyHandRect.top}px`;
+           document.body.appendChild(enemyClone);
+       }
+  } else {
+      // 非公開モード: 裏向きカードのアニメーション (既存ロジック)
+      const enemyHandRect = p2HandEl.getBoundingClientRect();
+      enemyClone = document.createElement('div');
+      enemyClone.className = 'card face-down animating-card';
+      enemyClone.textContent = '?';
+      enemyClone.style.left = `${enemyHandRect.left + enemyHandRect.width / 2 - 50}px`; 
+      enemyClone.style.top = `${enemyHandRect.top}px`;
+      enemyClone.style.width = '110px';
+      enemyClone.style.height = '170px';
+      document.body.appendChild(enemyClone);
+  }
+
+  // アニメーション実行
+  // enemyCloneは既にbodyに追加され、初期位置にある状態
   
+  // createCardElementで作成した場合のCSS補正が必要な場合があるが、
+  // animating-cardクラスでfixedがついているはず。
+  
+  const etx = enemySlotRect.left - parseFloat(enemyClone.style.left || '0') + (enemySlotRect.width - enemyClone.getBoundingClientRect().width) / 2;
+  const ety = enemySlotRect.top - parseFloat(enemyClone.style.top || '0') + (enemySlotRect.height - enemyClone.getBoundingClientRect().height) / 2;
+  
+  // requestAnimationFrameで確実にスタイル適用後にtransform
   requestAnimationFrame(() => {
-      enemyClone.style.transform = `translate(${etx}px, ${ety}px)`;
+     enemyClone.style.transform = `translate(${etx}px, ${ety}px)`;
   });
 
   await new Promise(r => setTimeout(r, 600));

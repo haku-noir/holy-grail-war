@@ -17,6 +17,10 @@
         <div class="subtitle">Round Table 13</div>
         <div class="input-group">
           <input type="text" id="player-name-input" placeholder="Enter Player Name" value="Player" />
+          <label class="checkbox-container">
+            <input type="checkbox" id="chk-hand-open-cpu" checked>
+            <span>相手の手札を公開する (Open Hand)</span>
+          </label>
         </div>
         <div class="menu-buttons">
           <button id="btn-cpu-battle" class="menu-btn">CPU Battle</button>
@@ -28,7 +32,13 @@
       <div id="lobby-screen" class="screen hidden">
         <h2>Online Lobby</h2>
         <div class="lobby-controls">
-          <button id="btn-create-room" class="menu-btn small">Create Room</button>
+          <div class="create-room-group">
+            <button id="btn-create-room" class="menu-btn small">Create Room</button>
+            <label class="checkbox-container small">
+              <input type="checkbox" id="chk-hand-open-online" checked>
+              <span>Open Hand</span>
+            </label>
+          </div>
           <button id="btn-refresh-rooms" class="menu-btn small">Refresh</button>
           <button id="btn-back-title" class="menu-btn small secondary">Back</button>
         </div>

@@ -542,3 +542,31 @@ button:hover {
 .hidden { display: none !important; }
 .fade-in { animation: fadeIn 0.5s forwards; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* チェックボックス */
+.checkbox-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-main);
+  color: var(--text-primary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox-container input[type="checkbox"] {
+  accent-color: var(--accent-gold);
+  width: 1.2rem;
+  height: 1.2rem;
+  cursor: pointer;
+}
+
+.create-room-group {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.checkbox-container.small {
+  font-size: 0.9rem;
+}

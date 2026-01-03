@@ -26,6 +26,11 @@ export interface GameState {
   stockGrails: number; // 場の聖杯（便宜上無限）
   logs: string[];
   winner: PlayerId | 'draw' | null; // 最終結果用
+  config?: GameConfig;
+}
+
+export interface GameConfig {
+  isHandOpen: boolean;
 }
 
 // イベントシステム

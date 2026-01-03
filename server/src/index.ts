@@ -12,6 +12,9 @@ interface Room {
     guestName?: string;
     engine?: GameEngine; // 適切なEngineを使用
     rematchRequests: Set<string>; // 再戦リクエストをしたプレイヤーID (socket.id)
+    config: {
+        isHandOpen: boolean;
+    };
 }
 
 const httpServer = createServer();
@@ -28,7 +31,7 @@ const socketToRoom: Record<string, string> = {};
 io.on('connection', (socket) => {
     console.log('クライアント接続:', socket.id);
 
-    socket.on('create_room', (playerName: string) => {
+    socket.on('create_room', (playerName: string, isHandOpen: boolean) => {
         if (socketToRoom[socket.id]) {
             socket.emit('error', '既にルームに参加しています。');
             return;
@@ -39,13 +42,16 @@ io.on('connection', (socket) => {
             id: roomId,
             hostId: socket.id,
             hostName: playerName,
-            rematchRequests: new Set()
+            rematchRequests: new Set(),
+            config: {
+                isHandOpen: isHandOpen
+            }
         };
         socketToRoom[socket.id] = roomId;
 
         socket.join(roomId);
         socket.emit('room_created', roomId);
-        console.log(`ルーム作成: ${roomId} 作成者: ${playerName} (${socket.id})`);
+        console.log(`ルーム作成: ${roomId} 作成者: ${playerName} (${socket.id}) 手札公開: ${isHandOpen}`);
     });
 
     socket.on('list_rooms', () => {
@@ -54,7 +60,8 @@ io.on('connection', (socket) => {
             .map(r => ({ 
                 id: r.id, 
                 name: `Room ${r.id.substring(0, 4)}`,
-                hostName: r.hostName
+                hostName: r.hostName,
+                isHandOpen: r.config.isHandOpen
             }));
         socket.emit('room_list', availableRooms);
     });
@@ -76,6 +83,8 @@ io.on('connection', (socket) => {
             // エンジンの初期化
             room.engine = new GameEngine();
             const state = room.engine.gameState;
+            // configを注入
+            state.config = room.config;
             
             // プレイヤーIDを含む開始イベントを送信
             io.to(roomId).emit('game_start', { 
@@ -129,6 +138,9 @@ io.on('connection', (socket) => {
             }
             
             // 結果のブロードキャスト
+            // configを注入
+            engine.gameState.config = room.config;
+
             // 以下を送信する必要があります:
             // 1. 相手がプレイしたカード（これまでは非公開。Engineはログ出力しますが、明示的なフィールドが必要です）
             // 2. 解決結果
@@ -177,6 +189,7 @@ io.on('connection', (socket) => {
             room.rematchRequests.clear(); // リセット
 
             const state = room.engine.gameState;
+            state.config = room.config;
             
             // プレイヤーIDを含む開始イベントを再送信
             io.to(roomId).emit('game_start', { 
